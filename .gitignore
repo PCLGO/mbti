@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.claude/
+.agents/
+mbti/config.json
+*.txt

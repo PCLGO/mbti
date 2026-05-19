@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MBTI 人格类型测试</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif; }
+  .screen { display: none; }
+  .screen.active { display: flex; }
+  .fade-enter { animation: fadeSlideIn .35s ease both; }
+  @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Likert */
+  .likert-btn { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; user-select: none; transition: transform .15s; -webkit-tap-highlight-color: transparent; }
+  .likert-btn:active { transform: scale(.95); }
+  .likert-circle { width: 44px; height: 44px; border-radius: 50%; border: 2.5px solid #d1d5db; background: #fff; transition: all .22s ease; position: relative; cursor: pointer; }
+  .likert-circle::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: #4f46e5; opacity: 0; transition: all .3s cubic-bezier(.4,0,.2,1); transform: scale(0); }
+  .likert-btn.selected .likert-circle { border-color: #4f46e5; background: #eef2ff; transform: scale(1.12); box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
+  .likert-btn.selected .likert-circle::after { opacity: 1; transform: scale(1); }
+  .likert-btn:hover .likert-circle:not(.selected) { border-color: #818cf8; background: #eef2ff; transform: scale(1.04); }
+  .likert-btn:hover .likert-label-full { color: #4f46e5; }
+
+  .progress-track { @apply w-full h-2 bg-gray-100 rounded-full overflow-hidden; }
+  .progress-fill { @apply h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500 ease-out; }
+
+  .type-letter { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 14px; font-size: 28px; font-weight: 800; }
+  .type-letter.E { background: #e0f2fe; color: #0369a1; }
+  .type-letter.I { background: #fce7f3; color: #be185d; }
+  .type-letter.S { background: #fef3c7; color: #b45309; }
+  .type-letter.N { background: #ede9fe; color: #6d28d9; }
+  .type-letter.T { background: #dbeafe; color: #1d4ed8; }
+  .type-letter.F { background: #fce4ec; color: #c62828; }
+  .type-letter.J { background: #e0f2f1; color: #00695c; }
+  .type-letter.P { background: #f3e5f5; color: #7b1fa2; }
+  .type-letter.A { background: #dcfce7; color: #15803d; }
+  .type-letter.T-identity { background: #fef2f2; color: #b91c1c; }
+
+  .dim-bar-bg { @apply w-full h-3 bg-gray-100 rounded-full overflow-hidden; }
+  .dim-bar-fill { @apply h-full rounded-full transition-all duration-700 ease-out; }
+  .spinner { width: 44px; height: 44px; border: 4px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .agreement-high { @apply bg-emerald-50 text-emerald-700 border-emerald-200; }
+  .agreement-medium { @apply bg-amber-50 text-amber-700 border-amber-200; }
+  .agreement-low { @apply bg-rose-50 text-rose-700 border-rose-200; }
+
+  @media (max-width: 480px) {
+    .likert-circle { width: 32px; height: 32px; }
+    .likert-btn { gap: 4px; }
+    .likert-label-full { display: none; }
+    .likert-label-short { display: inline; }
+  }
+  @media (min-width: 481px) {
+    .likert-label-short { display: none; }
+    .likert-label-full { display: inline; }
+  }
+
+  textarea { @apply w-full px-4 py-3.5 border border-gray-200 rounded-xl resize-y outline-none transition-all text-gray-700 text-sm leading-relaxed bg-gray-50; }
+  textarea:focus { @apply border-indigo-400 ring-2 ring-indigo-100 bg-white; }
+  .btn-back { @apply inline-flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-all font-medium px-3 py-1.5 rounded-lg hover:bg-gray-50 active:bg-gray-100; }
+  .btn-gradient { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff; padding: 10px 28px; border-radius: 14px; font-weight: 700; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; transition: all .25s ease; box-shadow: 0 8px 24px -6px rgba(79,70,229,.35); border: none; cursor: pointer; }
+  .btn-gradient:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(79,70,229,.5); }
+  .btn-gradient:active { transform: translateY(0) scale(.97); }
+  .btn-primary { @apply bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-[.97] transition-all text-sm; }
+  .btn-primary:hover { box-shadow: 0 8px 25px -8px rgba(79,70,229,.5); }
+  .btn-secondary { @apply px-5 py-2.5 rounded-xl font-medium border-2 border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50/50 transition-all text-sm; }
+  .btn-ghost { @apply px-5 py-2.5 rounded-xl font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100/60 transition-all text-sm; }
+  .btn-outline { display: inline-flex; align-items: center; gap: 6px; padding: 10px 22px; border-radius: 14px; font-weight: 600; font-size: 14px; border: 2px solid rgba(31,41,55,.12); color: #374151; background: rgba(255,255,255,.7); transition: all .2s ease; cursor: pointer; backdrop-filter: blur(4px); }
+  .btn-outline:hover { border-color: rgba(79,70,229,.3); color: #4f46e5; background: rgba(255,255,255,.95); transform: translateY(-1px); box-shadow: 0 8px 20px -6px rgba(79,70,229,.15); }
+
+  .hero-shell { background: radial-gradient(circle at top left, rgba(76, 175, 147, .16), transparent 34%), radial-gradient(circle at 88% 18%, rgba(127, 87, 194, .14), transparent 30%), #f7f5f1; }
+  .soft-card { background: rgba(255,255,255,.88); border: 1px solid rgba(31,41,55,.08); box-shadow: 0 18px 50px rgba(31,41,55,.08); }
+  .family-chip { border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; }
+  .family-analyst { background: #f1ebff; color: #6d28d9; }
+  .family-diplomat { background: #e8f7ef; color: #17805a; }
+  .family-sentinel { background: #e8f1fb; color: #2563eb; }
+  .family-explorer { background: #fff4d6; color: #b7791f; }
+  .hero-figure { position: relative; width: 220px; height: 220px; margin: 0 auto; }
+  .hero-figure::before { content: ''; position: absolute; inset: 18px; border-radius: 44% 56% 52% 48%; background: linear-gradient(135deg, #7f57c2, #38a169); opacity: .18; }
+  .hero-avatar { position:absolute; inset:36px; border-radius: 38% 62% 48% 52%; background: linear-gradient(145deg, #fff, #f0ebe4); border: 1px solid rgba(31,41,55,.08); box-shadow: 0 20px 45px rgba(31,41,55,.12); display:flex; align-items:center; justify-content:center; }
+  .hero-avatar span { font-size: 56px; font-weight: 900; letter-spacing: -.08em; color: #4f46e5; }
+  .page-nav { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 40; background: rgba(255,255,255,.82); backdrop-filter: blur(16px); border: 1px solid rgba(31,41,55,.08); box-shadow: 0 10px 30px rgba(31,41,55,.08); }
+  .quality-fill { height: 100%; border-radius: 999px; transition: width .25s ease; background: linear-gradient(90deg, #f59e0b, #4f46e5, #10b981); }
+  .nav-icon { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: 1px solid rgba(31,41,55,.12); background: #fff; color: #4b5563; box-shadow: 0 4px 12px rgba(31,41,55,.08); transition: all .18s ease; }
+  .nav-icon:hover:not(:disabled) { color: #4f46e5; border-color: rgba(79,70,229,.35); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(79,70,229,.12); }
+  .nav-icon:disabled { opacity: .3; cursor: not-allowed; box-shadow: none; }
+  .decision-card { width: 100%; border-radius: 24px; padding: 18px 20px; text-align: left; transition: all .18s ease; border: 1px solid rgba(31,41,55,.08); }
+  .decision-card:hover { transform: translateY(-1px); box-shadow: 0 16px 36px rgba(31,41,55,.1); }
+  .decision-card.primary { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; }
+  .decision-card.secondary { background: rgba(255,255,255,.9); color: #374151; }
+  .decision-card.tertiary { background: rgba(255,255,255,.6); color: #6b7280; }
+  .result-dense { max-width: 980px; }
+</style>
+</head>
+<body class="text-gray-900 antialiased bg-[#f7f5f1]">
+
+
+<div class="min-h-screen flex flex-col">
+
+  <!-- ====== GLOBAL NAV ====== -->
+  <div id="global-nav" class="page-nav rounded-full px-2 py-2 hidden sm:flex items-center gap-1 text-sm z-50">
+    <button onclick="navTo('welcome')" data-nav="welcome" class="px-4 py-2 rounded-full font-semibold text-gray-500 hover:bg-gray-100 flex items-center gap-1.5 transition-all duration-200">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>首页
+    </button>
+    <button onclick="navTo('theory')" data-nav="theory" class="px-4 py-2 rounded-full font-semibold text-gray-500 hover:bg-gray-100 flex items-center gap-1.5 transition-all duration-200">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>模型
+    </button>
+    <button onclick="navTo('library')" data-nav="library" class="px-4 py-2 rounded-full font-semibold text-gray-500 hover:bg-gray-100 flex items-center gap-1.5 transition-all duration-200">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>类型库
+    </button>
+  </div>
+
+  <!-- ====== WELCOME ====== -->
+  <div id="screen-welcome" class="screen active hero-shell flex-1 flex-col px-6 py-8">
+    <div class="max-w-6xl mx-auto w-full flex-1 grid lg:grid-cols-[1.05fr_.95fr] gap-10 items-center pt-20 sm:pt-28">
+      <div class="space-y-8 animate-[fadeSlideIn_.6s_ease] text-left">
+        <div class="inline-flex items-center gap-2 family-chip family-diplomat">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          五维光谱 + AI 证据交叉验证
+        </div>
+        <div class="space-y-5">
+          <h1 class="text-5xl sm:text-6xl font-black tracking-tight leading-[1.02] text-gray-900">找到你做决定、恢复能量和面对冲突的真实模式</h1>
+          <p class="text-lg text-gray-600 leading-relaxed max-w-xl">先用 50 道量表定位五个连续维度，再用 5 道定制开放题追问最不确定的部分。AI 不直接替你贴标签，而是从回答证据中复核结果。</p>
+        </div>
+        <div class="grid grid-cols-3 gap-3 max-w-xl">
+          <div class="soft-card rounded-2xl p-4"><p class="text-2xl font-black text-gray-900">50</p><p class="text-xs text-gray-500 mt-1">量表题</p></div>
+          <div class="soft-card rounded-2xl p-4"><p class="text-2xl font-black text-gray-900">5</p><p class="text-xs text-gray-500 mt-1">开放追问</p></div>
+          <div class="soft-card rounded-2xl p-4"><p class="text-2xl font-black text-gray-900">32</p><p class="text-xs text-gray-500 mt-1">含 A/T 类型</p></div>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <div id="resume-banner" class="hidden w-full"></div>
+          <button onclick="startTest()" class="btn-gradient text-base" id="start-test-btn">
+            → 开始测试
+          </button>
+          <button onclick="showScreen('theory')" class="btn-outline">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+            模型
+          </button>
+          <button onclick="renderTypeLibrary()" class="btn-outline">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            类型库
+          </button>
+        </div>
+        <p class="text-sm text-gray-500">大约需要 12-18 分钟。开放题写得越具体，AI 复核越可靠。</p>
+      </div>
+      <div class="soft-card rounded-[2rem] p-6 sm:p-8 animate-[fadeSlideIn_.75s_ease]">
+        <div class="hero-figure"><div class="hero-avatar"><span>MBTI</span></div></div>
+        <div class="grid grid-cols-2 gap-3 mt-8">
+          <div class="rounded-2xl bg-purple-50 p-4 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:bg-purple-100/60"><p class="font-bold text-purple-700">分析家</p><p class="text-xs text-purple-500 mt-1">策略、概念、系统</p></div>
+          <div class="rounded-2xl bg-emerald-50 p-4 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:bg-emerald-100/60"><p class="font-bold text-emerald-700">外交家</p><p class="text-xs text-emerald-500 mt-1">价值、关系、愿景</p></div>
+          <div class="rounded-2xl bg-blue-50 p-4 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:bg-blue-100/60"><p class="font-bold text-blue-700">守卫者</p><p class="text-xs text-blue-500 mt-1">责任、秩序、稳定</p></div>
+          <div class="rounded-2xl bg-amber-50 p-4 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:bg-amber-100/60"><p class="font-bold text-amber-700">探险家</p><p class="text-xs text-amber-500 mt-1">体验、行动、自由</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== THEORY ====== -->
+  <div id="screen-theory" class="screen hero-shell flex-1 flex-col px-6 py-10">
+    <div class="max-w-5xl mx-auto w-full space-y-8 pt-8 sm:pt-16">
+      <div class="soft-card rounded-[2rem] p-6 sm:p-10 space-y-6">
+        <span class="family-chip family-analyst">模型说明</span>
+        <h2 class="text-4xl font-black tracking-tight">不是把你塞进盒子，而是看五条光谱的相对倾向</h2>
+        <p class="text-gray-600 leading-relaxed max-w-3xl">这个测试参考 16Personalities 的表达方式：用 Mind / Energy / Nature / Tactics / Identity 五个方面理解人格。传统量表给出初始坐标，开放题负责验证那些"看起来接近中间"或"容易自我误判"的维度。</p>
+        <div class="grid md:grid-cols-5 gap-3">
+          <div class="rounded-2xl bg-white/70 border border-gray-100 p-4"><p class="text-lg font-black text-indigo-600">EI</p><p class="font-bold text-sm mt-1">精力来源</p><p class="text-xs text-gray-500 mt-2">外向 / 内向</p></div>
+          <div class="rounded-2xl bg-white/70 border border-gray-100 p-4"><p class="text-lg font-black text-indigo-600">SN</p><p class="font-bold text-sm mt-1">认知方式</p><p class="text-xs text-gray-500 mt-2">实感 / 直觉</p></div>
+          <div class="rounded-2xl bg-white/70 border border-gray-100 p-4"><p class="text-lg font-black text-indigo-600">TF</p><p class="font-bold text-sm mt-1">决策方式</p><p class="text-xs text-gray-500 mt-2">理性 / 感性</p></div>
+          <div class="rounded-2xl bg-white/70 border border-gray-100 p-4"><p class="text-lg font-black text-indigo-600">JP</p><p class="font-bold text-sm mt-1">生活态度</p><p class="text-xs text-gray-500 mt-2">判断 / 感知</p></div>
+          <div class="rounded-2xl bg-white/70 border border-gray-100 p-4"><p class="text-lg font-black text-indigo-600">AT</p><p class="font-bold text-sm mt-1">身份认同</p><p class="text-xs text-gray-500 mt-2">坚定 / 波动</p></div>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-3 gap-4">
+        <div class="soft-card rounded-3xl p-6"><h3 class="font-bold">量表定位</h3><p class="text-sm text-gray-600 mt-2 leading-relaxed">50 道题均衡覆盖五个维度，结果以百分比呈现，避免只看四个字母。</p></div>
+        <div class="soft-card rounded-3xl p-6"><h3 class="font-bold">冲突追问</h3><p class="text-sm text-gray-600 mt-2 leading-relaxed">开放题优先追问不确定维度，用真实冲突、取舍和压力场景提高信息量。</p></div>
+        <div class="soft-card rounded-3xl p-6"><h3 class="font-bold">AI 复核</h3><p class="text-sm text-gray-600 mt-2 leading-relaxed">AI 会输出证据、反证、置信度和需要补充的问题，而不是盲目认同初始结果。</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== TYPE LIBRARY ====== -->
+  <div id="screen-library" class="screen hero-shell flex-1 flex-col px-6 py-10">
+    <div class="max-w-6xl mx-auto w-full space-y-6 pt-8 sm:pt-16">
+      <div id="type-library-grid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+    </div>
+  </div>
+
+  <!-- ====== TRADITIONAL ====== -->
+  <div id="screen-traditional" class="screen flex-1 flex-col items-center px-4 pt-14 pb-8">
+    <div class="w-full max-w-2xl mx-auto" id="question-container"></div>
+  </div>
+
+  <!-- ====== OPEN-INTRO ====== -->
+  <div id="screen-open-intro" class="screen flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+    <div class="max-w-sm mx-auto space-y-6">
+      <div class="flex justify-center gap-2" id="prelim-type-letters"></div>
+      <h2 class="text-2xl font-bold">初步结果已生成</h2>
+      <p class="text-gray-500">量表分析显示你的类型为</p>
+      <p class="text-3xl font-extrabold text-indigo-600 tracking-widest" id="prelim-type-text">------</p>
+      <p class="text-gray-400 text-sm leading-relaxed">接下来根据你的类型定制了 5 道深度问题，<br>AI 将从你的回答中交叉验证人格类型。</p>
+      <div class="space-y-3 pt-2 w-full max-w-sm mx-auto">
+        <button onclick="showOpenEnded()" class="decision-card primary">
+          <span class="block text-base font-bold">继续深度分析</span>
+          <span class="block text-sm text-white/75 mt-1">回答 5 道定制问题，让 AI 复核最不确定的维度</span>
+        </button>
+        <button onclick="skipToResults()" class="decision-card secondary">
+          <span class="block text-sm font-bold">跳过，直接看传统结果</span>
+          <span class="block text-xs text-gray-500 mt-1">只展示量表得分和基础人格解读</span>
+        </button>
+        <button onclick="goBackToTraditional()" class="decision-card tertiary">
+          <span class="block text-sm font-bold">返回修改量表答案</span>
+          <span class="block text-xs text-gray-500 mt-1">重新检查刚才的选择</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== OPEN-ENDED (one at a time) ====== -->
+  <div id="screen-open-ended" class="screen flex-1 flex-col items-center justify-center px-6 pt-16 pb-8">
+    <div class="w-full max-w-2xl mx-auto" id="oe-container"></div>
+  </div>
+
+  <!-- ====== LOADING ====== -->
+  <div id="screen-loading" class="screen flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+    <div class="space-y-6">
+      <div class="spinner mx-auto"></div>
+      <p class="text-lg font-medium" id="loading-text">加载中...</p>
+      <p class="text-sm text-gray-400" id="loading-hint"></p>
+    </div>
+  </div>
+
+  <!-- ====== RESULTS ====== -->
+  <div id="screen-results" class="screen flex-1 flex-col px-6 py-8">
+    <div class="result-dense mx-auto w-full grid lg:grid-cols-2 gap-5 pb-16" id="results-content"></div>
+  </div>
+
+  <!-- ====== TYPE OVERLAY ====== -->
+  <div id="type-overlay" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" onclick="closeTypeOverlay(event)" style="background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);">
+    <div class="bg-white rounded-[2rem] max-w-md w-full shadow-2xl overflow-hidden animate-[fadeSlideIn_.25s_ease]" id="type-overlay-content" onclick="event.stopPropagation()">
+    </div>
+  </div>
+
+  <!-- ====== CUSTOM MODAL ====== -->
+  <div id="app-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4" onclick="closeModal(false)" style="background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);">
+    <div class="bg-white rounded-[2rem] max-w-sm w-full shadow-2xl overflow-hidden animate-[fadeSlideIn_.25s_ease] p-6 sm:p-8 text-center space-y-5" onclick="event.stopPropagation()">
+      <div id="modal-icon" class="w-12 h-12 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto">
+        <svg class="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <p class="text-gray-700 text-sm leading-relaxed" id="modal-text"></p>
+      <div class="flex gap-3 justify-center" id="modal-buttons"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const STATE = { questions: null, answers: [], currentQ: 0, currentPage: 0, oeCurrentQ: 0, traditionalResult: null, aiResult: null, openAnswers: {}, currentScreen: '', _autoTimer: null };
+window.__STATE = STATE;
+const STORAGE_KEY = 'mbti_saved_state';
+
+function saveState() {
+  try {
+    if (!STATE.answers.length && !STATE.traditionalResult) { clearSavedState(); return; }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      screen: STATE.currentScreen, answers: STATE.answers, currentPage: STATE.currentPage,
+      oeCurrentQ: STATE.oeCurrentQ, openAnswers: STATE.openAnswers,
+      traditionalResult: STATE.traditionalResult, aiResult: STATE.aiResult,
+    }));
+  } catch(e) {}
+}
+function clearSavedState() { localStorage.removeItem(STORAGE_KEY); }
+function restoreState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (!d.answers || !d.answers.length) return false;
+    STATE.answers = d.answers; STATE.currentPage = d.currentPage || 0;
+    STATE.oeCurrentQ = d.oeCurrentQ || 0; STATE.openAnswers = d.openAnswers || {};
+    STATE.traditionalResult = d.traditionalResult || null; STATE.aiResult = d.aiResult || null;
+    STATE.currentScreen = d.screen || ''; return true;
+  } catch(e) { return false; }
+}
+function isTestInProgress() { return STATE.answers.length > 0 || STATE.traditionalResult || Object.keys(STATE.openAnswers).length > 0; }
+
+let _modalResolve = null;
+function showModal(text, type = 'confirm') {
+  return new Promise(resolve => {
+    _modalResolve = resolve;
+    document.getElementById('modal-text').textContent = text;
+    const icon = document.getElementById('modal-icon');
+    icon.innerHTML = type === 'alert'
+      ? '<svg class="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+      : '<svg class="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+    document.getElementById('modal-buttons').innerHTML = type === 'alert'
+      ? '<button onclick="closeModal(true)" class="btn-gradient text-sm px-8">确定</button>'
+      : '<button onclick="closeModal(false)" class="btn-secondary text-sm px-6">取消</button><button onclick="closeModal(true)" class="btn-gradient text-sm px-6">确定</button>';
+    document.getElementById('app-modal').classList.remove('hidden');
+  });
+}
+function closeModal(result) {
+  document.getElementById('app-modal').classList.add('hidden');
+  if (_modalResolve) { _modalResolve(result); _modalResolve = null; }
+}
+const QS_PER_PAGE = 5;
+const DIMS = ['EI', 'SN', 'TF', 'JP', 'AT'];
+const FIRST_POLES = { EI: 'E', SN: 'S', TF: 'T', JP: 'J', AT: 'A' };
+const TYPE_FAMILIES = {
+  INTJ:['分析家','family-analyst'], INTP:['分析家','family-analyst'], ENTJ:['分析家','family-analyst'], ENTP:['分析家','family-analyst'],
+  INFJ:['外交家','family-diplomat'], INFP:['外交家','family-diplomat'], ENFJ:['外交家','family-diplomat'], ENFP:['外交家','family-diplomat'],
+  ISTJ:['守卫者','family-sentinel'], ISFJ:['守卫者','family-sentinel'], ESTJ:['守卫者','family-sentinel'], ESFJ:['守卫者','family-sentinel'],
+  ISTP:['探险家','family-explorer'], ISFP:['探险家','family-explorer'], ESTP:['探险家','family-explorer'], ESFP:['探险家','family-explorer'],
+};
+const FAMILY_GRADIENTS = { '分析家':'from-purple-500 via-violet-600 to-indigo-700', '外交家':'from-emerald-500 via-teal-600 to-cyan-700', '守卫者':'from-blue-500 via-sky-600 to-slate-700', '探险家':'from-amber-400 via-orange-500 to-rose-600' };
+function getTypeFamily(type) { return TYPE_FAMILIES[type] || ['人格类型','family-analyst']; }
+const DIM_INFO = {
+  E:{label:'外向',desc:'从社交互动中获取能量'}, I:{label:'内向',desc:'从独处反思中获取能量'},
+  S:{label:'实感',desc:'关注具体事实与细节'}, N:{label:'直觉',desc:'关注整体模式与可能性'},
+  T:{label:'思考',desc:'用逻辑与原则做决定'}, F:{label:'情感',desc:'用价值观与同理心做决定'},
+  J:{label:'判断',desc:'喜欢计划与条理'}, P:{label:'感知',desc:'喜欢灵活与随性'},
+};
+const ROLE_TAGLINE = {
+  '分析家':'理性策略家——用逻辑与系统思维解构世界',
+  '外交家':'人际沟通者——用同理心与洞察力连接他人',
+  '守卫者':'可靠守护者——用责任与细致维护秩序',
+  '探险家':'自由行动派——用勇气与灵活探索未知',
+};
+
+// ====== SCREENS ======
+function updateNav(screenId) {
+  const navMap = { welcome:'welcome', theory:'theory', library:'library' };
+  const active = navMap[screenId] || '';
+  document.querySelectorAll('#global-nav [data-nav]').forEach(btn => {
+    const isActive = btn.dataset.nav === active;
+    btn.className = `px-4 py-2 rounded-full font-semibold flex items-center gap-1.5 transition-all duration-200 ${isActive ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`;
+  });
+  const hiddenScreens = ['traditional', 'open-intro', 'open-ended', 'loading', 'results'];
+  document.getElementById('global-nav').classList.toggle('hidden', hiddenScreens.includes(screenId));
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  window.scrollTo(0, 0);
+  updateNav(id);
+  STATE.currentScreen = id;
+  saveState();
+  // Refresh resume banner with latest progress when returning to welcome
+  if (id === 'welcome') refreshBanner();
+}
+
+async function navTo(id) {
+  if (id !== STATE.currentScreen && STATE.answers.length > 0 && STATE.currentScreen !== 'results' && !STATE._navGuardPassed) {
+    let msg;
+    if (STATE.currentScreen === 'traditional') {
+      msg = '测试仍在进行中，离开后可在首页继续作答，确定离开吗？';
+    } else {
+      msg = 'AI 分析尚未完成，离开后可在首页继续，确定离开吗？';
+    }
+    const ok = await showModal(msg);
+    if (!ok) return;
+    STATE._navGuardPassed = true;
+  }
+  if (id === 'library') renderTypeLibrary();
+  else showScreen(id);
+}
+
+// ====== LOAD ======
+async function loadQuestions() {
+  const res = await fetch('/api/questions');
+  STATE.questions = await res.json();
+}
+
+// ====== START ======
+async function startTest() {
+  // Always start fresh — clear everything
+  if (!STATE.questions) await loadQuestions();
+  clearSavedState();
+  STATE.answers = []; STATE.currentPage = 0; STATE.currentQ = 0;
+  STATE.oeCurrentQ = 0; STATE.openAnswers = {}; STATE.traditionalResult = null; STATE.aiResult = null; STATE._navGuardPassed = false;
+  STATE.currentScreen = '';
+  showScreen('traditional');
+  renderQuestionPage(0);
+}
+
+function resumeTest() {
+  // Continue saved progress — called from banner "继续" button
+  if (STATE.answers.length > 0) {
+    if (STATE.currentScreen === 'results') { renderResults(!!STATE.aiResult, true); return; }
+    if (STATE.currentScreen === 'traditional') { showScreen('traditional'); renderQuestionPage(STATE.currentPage); return; }
+    if (STATE.currentScreen === 'open-intro') { renderOpenIntro(); showScreen('open-intro'); return; }
+    if (STATE.currentScreen === 'open-ended') { showOpenEndedScreen(); return; }
+  }
+  showScreen('traditional');
+  renderQuestionPage(STATE.currentPage);
+}
+
+function refreshBanner() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const banner = document.getElementById('resume-banner');
+    if (!banner || !raw) { if (banner) banner.classList.add('hidden'); return; }
+    const data = JSON.parse(raw);
+    const n = data.answers ? data.answers.length : 0;
+    if (n === 0) { banner.classList.add('hidden'); return; }
+    if (data.traditionalResult) {
+      banner.innerHTML = '<div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-3 flex items-center gap-2"><span class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold shrink-0">!</span><p class="text-sm text-indigo-700 flex-1">检测到上次完成的测试结果（已完成全部 50 题）</p><button onclick="viewSavedResults()" class="px-4 py-1.5 bg-white text-indigo-700 text-sm font-semibold rounded-xl border border-indigo-200 hover:bg-indigo-50 transition-all shrink-0">查看结果</button><button onclick="viewSavedResults()" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-all shrink-0">继续测试</button><button onclick="dismissBanner()" class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-400 hover:bg-indigo-200 hover:text-indigo-600 flex items-center justify-center text-sm font-bold transition-all shrink-0">✕</button></div>';
+    } else {
+      banner.innerHTML = '<div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-3 flex items-center gap-3"><span class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold shrink-0">!</span><p class="text-sm text-indigo-700 flex-1">检测到上次未完成的测试（已答 ' + n + '/50 题）</p><button onclick="resumeTest()" class="px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-all shrink-0">继续↗</button><button onclick="dismissBanner()" class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-400 hover:bg-indigo-200 hover:text-indigo-600 flex items-center justify-center text-sm font-bold transition-all shrink-0">✕</button></div>';
+    }
+    banner.classList.remove('hidden');
+  } catch(e) {}
+}
+
+function dismissBanner() {
+  showModal('确定要丢弃已作答的内容吗？').then(ok => {
+    if (!ok) return;
+    clearSavedState();
+    document.getElementById('resume-banner').classList.add('hidden');
+  });
+}
+
+function renderQuestionPage(page) {
+  const qs = STATE.questions.traditional;
+  const likertLabels = STATE.questions.likert_labels;
+  const total = qs.length;
+  const totalPages = Math.ceil(total / QS_PER_PAGE);
+  if (page >= totalPages) { submitTraditional(); return; }
+  STATE.currentPage = page;
+
+  const start = page * QS_PER_PAGE;
+  const end = Math.min(start + QS_PER_PAGE, total);
+  const pageQs = qs.slice(start, end);
+  const answeredCount = STATE.answers.length;
+
+  const container = document.getElementById('question-container');
+  container.innerHTML = '';
+
+  const html = pageQs.map((q, i) => {
+    const dimMeta = STATE.questions.dimension_labels[q.dimension];
+    const existing = STATE.answers.find(a => a.id === q.id);
+    const selectedVal = existing ? existing.value : null;
+    return `
+      <div class="bg-white rounded-xl p-4 sm:p-5 border border-gray-100 shadow-sm ${i > 0 ? 'mt-3' : ''}">
+        <div class="flex items-center gap-2 mb-2.5">
+          <span class="text-[10px] font-semibold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded">${dimMeta.name}</span>
+          <span class="text-[10px] text-gray-300">${dimMeta.left_label} · ${dimMeta.right_label}</span>
+        </div>
+        <p class="text-sm sm:text-base font-medium leading-relaxed mb-3">${q.text}</p>
+        <div class="flex items-center justify-between px-0.5 sm:px-2" data-scale="${q.id}">
+          ${likertLabels.map(opt => `
+            <div class="likert-btn${selectedVal === opt.value ? ' selected' : ''}" data-value="${opt.value}" onclick="selectAnswer(${q.id}, ${opt.value}, this)">
+              <div class="likert-circle${selectedVal === opt.value ? ' selected' : ''}"></div>
+              <span class="text-[10px] sm:text-xs font-semibold text-gray-500 likert-label-full">${opt.label}</span>
+              <span class="text-[10px] sm:text-xs font-semibold text-gray-500 likert-label-short">${opt.short}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }).join('');
+
+  const isLast = page >= totalPages - 1;
+  const btnHtml = isLast
+    ? `<button onclick="submitTraditional()" class="btn-gradient text-sm py-3 px-24">✓ 查看结果</button>`
+    : `<button onclick="nextPage()" class="btn-gradient text-sm py-3 px-24">→ 下一页</button>`;
+
+  const prevBtn = page > 0
+    ? `<button onclick="prevPage()" class="btn-outline px-24 py-3 text-sm whitespace-nowrap">← 上一页</button>`
+    : '<div></div>';
+
+  container.innerHTML = `
+    <div class="fade-enter space-y-4">
+      ${html}
+      <div class="flex items-center justify-between gap-2 pt-2">
+        ${prevBtn}
+        <span class="text-xs text-gray-400 font-medium text-center">第 ${page + 1}/${totalPages} 页 · 已答 ${answeredCount}/${total}</span>
+        ${btnHtml}
+      </div>
+    </div>`;
+  window.scrollTo(0, 0);
+}
+
+function selectAnswer(qId, value, el) {
+  const idx = STATE.answers.findIndex(a => a.id === qId);
+  if (idx >= 0) STATE.answers[idx] = { id: qId, value };
+  else STATE.answers.push({ id: qId, value });
+  const scale = el.closest('[data-scale]');
+  scale.querySelectorAll('.likert-btn').forEach(b => {
+    const selected = parseInt(b.dataset.value) === value;
+    b.classList.toggle('selected', selected);
+    b.querySelector('.likert-circle').classList.toggle('selected', selected);
+  });
+  saveState();
+}
+
+function prevPage() {
+  if (STATE.currentPage <= 0) return;
+  renderQuestionPage(STATE.currentPage - 1);
+}
+
+function nextPage() {
+  const start = STATE.currentPage * QS_PER_PAGE;
+  const end = Math.min(start + QS_PER_PAGE, STATE.questions.traditional.length);
+  const pageQs = STATE.questions.traditional.slice(start, end);
+  const answeredIds = new Set(STATE.answers.map(a => a.id));
+  const missing = pageQs.filter(q => !answeredIds.has(q.id));
+  if (missing.length > 0) {
+    missing.forEach(q => {
+      const el = document.querySelector(`[data-scale="${q.id}"]`);
+      if (!el) return;
+      const card = el.closest('.bg-white');
+      if (!card) return;
+      card.style.transition = 'box-shadow .3s, border-color .3s';
+      card.style.boxShadow = '0 0 0 2px #ef4444';
+      card.style.borderColor = '#fca5a5';
+      setTimeout(() => { card.style.boxShadow = ''; card.style.borderColor = ''; }, 1500);
+    });
+    return;
+  }
+  renderQuestionPage(STATE.currentPage + 1);
+}
+
+async function submitTraditional() {
+  const qs = STATE.questions.traditional;
+  const answeredIds = new Set(STATE.answers.map(a => a.id));
+  if (answeredIds.size < qs.length) {
+    // Highlight unanswered questions on current page with red glow
+    const start = STATE.currentPage * QS_PER_PAGE;
+    const end = Math.min(start + QS_PER_PAGE, qs.length);
+    let missing = 0;
+    for (let i = start; i < end; i++) {
+      if (!answeredIds.has(qs[i].id)) {
+        missing++;
+        const el = document.querySelector(`[data-scale="${qs[i].id}"]`);
+        if (!el) continue;
+        const card = el.closest('.bg-white');
+        if (!card) continue;
+        card.style.transition = 'box-shadow .3s, border-color .3s';
+        card.style.boxShadow = '0 0 0 2px #ef4444';
+        card.style.borderColor = '#fca5a5';
+        setTimeout(() => { card.style.boxShadow = ''; card.style.borderColor = ''; }, 1500);
+      }
+    }
+    if (missing === 0) {
+      // All current page answered but other pages have missing — just show modal
+      await showModal('还有 ' + (qs.length - answeredIds.size) + ' 题未作答，请翻页检查后再提交。', 'alert');
+    }
+    return;
+  }
+  showScreen('loading');
+  document.getElementById('loading-text').textContent = '正在计算...';
+  document.getElementById('loading-hint').textContent = '';
+  try {
+    const res = await fetch('/api/score', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: STATE.answers.map(a => ({ id: a.id, value: a.value })) }),
+    });
+    STATE.traditionalResult = await res.json();
+    const t = STATE.traditionalResult.type;
+    const iden = STATE.traditionalResult.identity;
+    const full = t + '-' + iden;
+    document.getElementById('prelim-type-letters').innerHTML = (t + iden).split('').map(ch => `<span class="type-letter ${ch}">${ch}</span>`).join('');
+    document.getElementById('prelim-type-text').textContent = full;
+    STATE.openAnswers = {};
+    showScreen('open-intro');
+  } catch (e) {
+    await showModal('提交失败: ' + e.message, 'alert');
+    showScreen('welcome');
+  }
+}
+
+
+function renderTypeLibrary() {
+  if (!STATE.questions) { loadQuestions().then(renderTypeLibrary); return; }
+  const grid = document.getElementById('type-library-grid');
+  const profiles = STATE.questions.type_profiles || {};
+  const FAMILIES = { '分析家':['INTJ','INTP','ENTJ','ENTP'], '外交家':['INFJ','INFP','ENFJ','ENFP'], '守卫者':['ISTJ','ISFJ','ESTJ','ESFJ'], '探险家':['ISTP','ISFP','ESTP','ESFP'] };
+  grid.innerHTML = Object.entries(FAMILIES).map(([famName, types]) => {
+    const famCls = getTypeFamily(types[0])[1];
+    const cards = types.filter(t => profiles[t]).map(type => {
+      const p = profiles[type];
+      return `<button onclick="openTypeOverlay('${type}')" class="soft-card text-left rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:-translate-y-1.5 hover:shadow-xl group">
+        <span class="family-chip ${famCls}">${famName}</span>
+        <div class="flex items-center gap-1.5 mt-3 mb-1.5">${type.split('').map(ch => `<span class="type-letter ${ch} !w-9 !h-9 !text-lg transition-transform duration-200 group-hover:scale-110">${ch}</span>`).join('')}</div>
+        <h3 class="font-black text-base">${p.nickname || type}</h3>
+        <p class="text-xs text-gray-500 mt-1.5 leading-relaxed line-clamp-2">${p.description || ''}</p>
+      </button>`;
+    }).join('');
+    return `<div class="sm:col-span-2 lg:col-span-4 mt-6 first:mt-0"><div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">${cards}</div></div>`;
+  }).join('');
+  showScreen('library');
+}
+
+function openTypeOverlay(type) {
+  const profile = STATE.questions.type_profiles[type];
+  if (!profile) return;
+  const [family, cls] = getTypeFamily(type);
+  const gradient = FAMILY_GRADIENTS[family] || 'from-indigo-500 via-purple-600 to-indigo-700';
+  const tagline = ROLE_TAGLINE[family] || '';
+  const letters = type.split('');
+  const container = document.getElementById('type-overlay-content');
+  container.innerHTML = `
+    <div class="bg-gradient-to-br ${gradient} px-6 py-6 text-white text-center space-y-3">
+      <span class="inline-block px-3 py-0.5 bg-white/15 rounded-full text-xs font-medium tracking-wider">${family}</span>
+      <div>
+        <p class="text-4xl font-black tracking-wider">${type}</p>
+        <p class="text-base text-white/80 font-semibold mt-0.5">${profile.nickname}</p>
+      </div>
+      <p class="text-xs text-white/60 leading-relaxed max-w-xs mx-auto">${profile.description}</p>
+    </div>
+    <div class="relative px-5 pt-4 pb-5 space-y-4">
+      <div class="absolute inset-0 bg-gradient-to-br ${gradient} opacity-5 rounded-b-[2rem]"></div>
+      <div class="relative">
+        <div class="grid grid-cols-4 gap-2">
+          ${letters.map(ch => {
+            const info = DIM_INFO[ch] || {label:ch,desc:''};
+            const opp = {E:'I',I:'E',S:'N',N:'S',T:'F',F:'T',J:'P',P:'J'}[ch];
+            return `<div class="text-center px-1 py-2 bg-white/90 rounded-xl shadow-sm">
+              <div class="flex items-center justify-center gap-0.5 mb-1">
+                <span class="text-sm font-black underline decoration-2 underline-offset-2" style="text-decoration-color:${ch === 'E'||ch==='S'||ch==='T'||ch==='J'?'#6366f1':'#10b981'}">${ch}</span>
+                <span class="text-[10px] text-gray-400 line-through">${opp}</span>
+              </div>
+              <p class="text-[11px] font-medium text-gray-700">${info.label}</p>
+              <p class="text-[9px] text-gray-400 leading-tight mt-0.5">${info.desc}</p>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="relative grid grid-cols-2 gap-2.5">
+        ${profile.strengths ? `
+        <div class="bg-white/90 rounded-xl px-3 py-2.5 space-y-1.5 shadow-sm">
+          <p class="text-xs font-bold text-emerald-600 flex items-center gap-1"><svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm-.7-10.3a1 1 0 011.4 0l3 3a1 1 0 01-1.4 1.4L11 11.41V15a1 1 0 11-2 0v-3.59l-1.3 1.3a1 1 0 01-1.4-1.4l3-3z"/></svg> 优势</p>
+          <ul class="text-xs text-gray-600 space-y-0.5">${profile.strengths.map(s => `<li class="flex items-start gap-1"><span class="text-emerald-400 mt-0.5">·</span>${s}</li>`).join('')}</ul>
+        </div>` : '<div></div>'}
+        ${profile.weaknesses ? `
+        <div class="bg-white/90 rounded-xl px-3 py-2.5 space-y-1.5 shadow-sm">
+          <p class="text-xs font-bold text-amber-600 flex items-center gap-1"><svg class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 6a1 1 0 112 0v4a1 1 0 11-2 0V6zm1 8a1 1 0 100-2 1 1 0 000 2z"/></svg> 注意</p>
+          <ul class="text-xs text-gray-600 space-y-0.5">${profile.weaknesses.map(s => `<li class="flex items-start gap-1"><span class="text-amber-400 mt-0.5">·</span>${s}</li>`).join('')}</ul>
+        </div>` : '<div></div>'}
+      </div>
+      ${profile.careers ? `
+      <div class="relative bg-white/90 rounded-xl px-3 py-2.5 space-y-2 shadow-sm">
+        <p class="text-xs font-bold text-gray-600">职业方向</p>
+        <div class="flex flex-wrap gap-1.5">${profile.careers.map(c => `<span class="px-2.5 py-1 bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 text-xs rounded-lg border border-indigo-100/60 font-medium">${c}</span>`).join('')}</div>
+      </div>` : ''}
+      ${tagline ? `
+      <div class="relative flex items-center gap-2 px-3 py-2.5 bg-gray-50/80 rounded-xl border border-gray-100">
+        <span class="w-6 h-6 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-xs font-bold">${family[0]}</span>
+        <p class="text-[11px] text-gray-500 leading-relaxed">${tagline}</p>
+      </div>` : ''}
+    </div>`;
+  document.getElementById('type-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTypeOverlay(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById('type-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function answerQuality(text) {
+  const len = text.trim().length;
+  let score = Math.min(100, Math.round(len / 180 * 70));
+  if (/因为|当时|后来|所以|但是|如果|选择|冲突|压力|例子/.test(text)) score += 15;
+  if (/[，。！？；]/.test(text) && len > 80) score += 10;
+  return Math.max(0, Math.min(100, score));
+}
+
+function qualityLabel(score) {
+  if (score >= 80) return '细节充足，AI 可以更稳地判断';
+  if (score >= 50) return '还不错，再加一个具体例子会更准';
+  if (score >= 25) return '信息偏少，建议写发生了什么和你怎么选择';
+  return '先写下真实场景，越具体越有价值';
+}
+
+// ====== OPEN-ENDED ======
+function showOpenEnded() {
+  const questions = STATE.traditionalResult.selected_questions;
+  if (!questions || !questions.length) { skipToResults(); return; }
+  STATE.oeCurrentQ = 0;
+  renderOpenEnded(0);
+}
+
+function renderOpenEnded(index) {
+  const questions = STATE.traditionalResult.selected_questions;
+  if (index >= questions.length) { submitOpenEnded(); return; }
+  STATE.oeCurrentQ = index;
+  const q = questions[index];
+  const total = questions.length;
+  const saved = STATE.openAnswers[q.display_id] || {};
+
+  const container = document.getElementById('oe-container');
+  container.innerHTML = '';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'fade-enter space-y-6';
+
+  // Progress
+  wrapper.innerHTML = `
+    <div class="space-y-2">
+      <div class="flex items-center justify-between text-xs text-gray-400">
+        <span>深度分析</span>
+        <span>${index + 1} / ${total}</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${(index / total) * 100}%"></div></div>
+    </div>
+  `;
+
+  // Card
+  const card = document.createElement('div');
+  card.className = 'bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm space-y-5';
+  card.innerHTML = `
+    <div class="text-center space-y-3 max-w-xl mx-auto">
+      <span class="mx-auto flex w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-full items-center justify-center text-sm font-bold shadow-md">${index + 1}</span>
+      <label class="block font-semibold text-gray-900 text-lg sm:text-xl leading-relaxed">${q.text}</label>
+      ${q.hint ? `<p class="text-sm text-gray-400 leading-relaxed max-w-lg mx-auto">${q.hint}</p>` : ''}
+    </div>
+    <div class="max-w-xl mx-auto w-full">
+      <textarea id="oe-textarea" rows="7" placeholder="" class="w-full text-left">${saved.answer || ''}</textarea>
+    </div>
+    <div class="space-y-2 max-w-xl mx-auto w-full">
+      <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div id="quality-fill" class="quality-fill" style="width:0%"></div></div>
+      <p id="quality-hint" class="text-xs text-gray-400">先写下真实场景，AI 会根据细节充分度复核结果。</p>
+    </div>
+  `;
+
+  // Navigation
+  const nav = document.createElement('div');
+  nav.className = 'flex items-center justify-between gap-3';
+
+  // Prev button (visible from Q2 onwards)
+  if (index > 0) {
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'btn-outline px-4 py-2.5 text-sm';
+    prevBtn.textContent = '← 上一题';
+    prevBtn.onclick = prevOE;
+    nav.appendChild(prevBtn);
+  } else {
+    // Spacer to keep right button aligned
+    nav.appendChild(document.createElement('div'));
+  }
+
+  // Next or Submit button
+  if (index < total - 1) {
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn-gradient text-sm';
+    nextBtn.textContent = '下一题 →';
+    nextBtn.onclick = nextOE;
+    nav.appendChild(nextBtn);
+  } else {
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'btn-gradient text-sm';
+    submitBtn.textContent = '✓ 提交 AI 分析';
+    submitBtn.onclick = submitOpenEnded;
+    nav.appendChild(submitBtn);
+  }
+
+  wrapper.appendChild(card);
+  wrapper.appendChild(nav);
+  container.appendChild(wrapper);
+
+  // Restore cursor position and focus
+  const ta = document.getElementById('oe-textarea');
+  function updateQuality() {
+    const score = answerQuality(ta.value);
+    document.getElementById('quality-fill').style.width = `${score}%`;
+    document.getElementById('quality-hint').textContent = qualityLabel(score);
+    STATE.openAnswers[q.display_id] = { answer: ta.value, text: q.text, quality_score: score };
+  }
+  ta.addEventListener('input', updateQuality);
+  updateQuality();
+  if (ta.value.length > 0) ta.focus();
+  saveState();
+  showScreen('open-ended');
+}
+
+function showOpenEndedScreen() {
+  const questions = STATE.traditionalResult && STATE.traditionalResult.selected_questions;
+  if (STATE.oeCurrentQ > 0 && STATE.oeCurrentQ < (questions || []).length) {
+    renderOpenEnded(STATE.oeCurrentQ);
+  } else {
+    showScreen('open-intro');
+  }
+}
+
+function nextOE() {
+  renderOpenEnded(STATE.oeCurrentQ + 1);
+}
+
+function prevOE() {
+  if (STATE.oeCurrentQ > 0) renderOpenEnded(STATE.oeCurrentQ - 1);
+}
+
+async function submitOpenEnded() {
+  // Save current textarea before submitting
+  const ta = document.getElementById('oe-textarea');
+  if (ta) {
+    const q = STATE.traditionalResult.selected_questions[STATE.oeCurrentQ];
+    STATE.openAnswers[q.display_id] = { answer: ta.value, text: q.text };
+  }
+  const filled = [];
+  for (const [displayId, data] of Object.entries(STATE.openAnswers)) {
+    if (data.answer && data.answer.trim()) {
+      filled.push({ display_id: displayId, text: data.text, answer: data.answer.trim(), quality_score: data.quality_score || answerQuality(data.answer) });
+    }
+  }
+  if (filled.length < 2) {
+    const ok = await showModal('至少回答 2 道题才能获得有效分析，确定继续吗？');
+    if (!ok) return;
+  }
+  showScreen('loading');
+  document.getElementById('loading-text').textContent = 'AI 正在深度分析...';
+  document.getElementById('loading-hint').textContent = '逐维交叉验证中，约需 10-30 秒';
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: STATE.traditionalResult.type,
+        identity: STATE.traditionalResult.identity,
+        details: STATE.traditionalResult.details,
+        open_answers: filled,
+      }),
+    });
+    if (res.status === 400) { const e = await res.json(); await showModal(e.error, 'alert'); showScreen('open-ended'); return; }
+    if (!res.ok) { STATE.aiResult = buildFallbackAI(); saveState(); renderResults(true); return; }
+    STATE.aiResult = await res.json();
+    saveState();
+    renderResults(true);
+  } catch (e) { STATE.aiResult = buildFallbackAI(); renderResults(true); }
+}
+
+function skipToResults() { STATE.aiResult = null; renderResults(false); }
+
+function buildFallbackAI() {
+  const t = STATE.traditionalResult;
+  const profile = STATE.questions.type_profiles ? STATE.questions.type_profiles[t.type] : null;
+  const dimLabels = STATE.questions.dimension_labels || {};
+  const dimAnalysis = {};
+  for (const dim of DIMS) {
+    const d = t.details[dim];
+    if (!d) continue;
+    const meta = dimLabels[dim] || {};
+    const label = d.dom_pct > 70 ? '明显偏向' : d.dom_pct > 55 ? '轻微偏向' : '接近居中';
+    dimAnalysis[dim] = {
+      '倾向': d.dominant + ' (' + d.dom_pct + '%)',
+      'confidence': Math.min(d.dom_pct + 10, 95),
+      'evidence': '传统量表数据显示你在该维度偏向 ' + d.dominant + '（' + d.dom_pct + '%），属于「' + label + '」。',
+      '分析': '基于量表统计，你在 ' + (meta.name || dim) + ' 维度上表现出 ' + d.dominant + ' 倾向，' + (d.dom_pct > 60 ? '这一倾向较为明显。' : '但并非极端，在不同情境下可能有所变化。')
+    };
+  }
+  return {
+    insight: profile ? (profile.nickname ? '基于传统量表数据，你的类型为 ' + t.type + '-' + t.identity + '（' + profile.nickname + '）。由于 AI 深度分析服务暂不可用，以下分析基于统计数据和类型特征生成，仅供参考。完成开放题后再次提交可获得更精准的个性化解读。' : '') : '基于传统量表数据的初步分析。',
+    agreement: 'medium',
+    ai_confidence: 60,
+    answer_quality_score: 50,
+    insufficient_evidence_dims: [],
+    differences: ['AI 深度分析暂不可用，无法对比差异。请稍后重试或检查 API 配置。'],
+    dimension_analysis: dimAnalysis,
+    strengths: profile && profile.strengths ? profile.strengths.slice(0, 4) : ['暂无数据'],
+    growth_areas: profile && profile.weaknesses ? profile.weaknesses.slice(0, 3) : ['暂无数据'],
+    career_hints: profile && profile.careers ? profile.careers.slice(0, 6) : [],
+    follow_up_questions: ['尝试描述一个最近让你感到困扰或兴奋的具体场景？', '你在团队中通常扮演什么角色？', '什么情况下你会觉得最有成就感？'],
+    summary: '你的传统测试结果为 ' + t.type + '-' + t.identity + '。各维度数据显示了你的基本倾向分布。由于当前 AI 分析服务暂不可用，详细的交叉验证和个性化洞察将在服务恢复后提供。'
+  };
+}
+
+function goBackToOpenIntro() { showScreen('open-intro'); }
+
+function goBackToTraditional() {
+  const totalPages = Math.ceil(STATE.questions.traditional.length / QS_PER_PAGE);
+  STATE.currentPage = totalPages - 1;
+  showScreen('traditional');
+  renderQuestionPage(totalPages - 1);
+}
+
+function renderOpenIntro() {
+  const t = STATE.traditionalResult;
+  if (!t) return;
+  const full = t.type + '-' + t.identity;
+  document.getElementById('prelim-type-letters').innerHTML = (t.type + t.identity).split('').map(ch => `<span class="type-letter ${ch}">${ch}</span>`).join('');
+  document.getElementById('prelim-type-text').textContent = full;
+}
+
+function viewSavedResults() {
+  if (restoreState()) {
+    if (STATE.aiResult) { renderResults(true, true); }
+    else if (STATE.traditionalResult) { renderOpenIntro(); showScreen('open-intro'); }
+    else if (STATE.answers.length) { showScreen('traditional'); renderQuestionPage(STATE.currentPage); }
+    else showScreen('welcome');
+  } else {
+    showScreen('welcome');
+  }
+}
+
+function retest() {
+  clearSavedState();
+  STATE.answers = []; STATE.currentPage = 0; STATE.currentQ = 0;
+  STATE.oeCurrentQ = 0; STATE.openAnswers = {}; STATE.traditionalResult = null; STATE.aiResult = null; STATE._navGuardPassed = false;
+  showScreen('traditional');
+  renderQuestionPage(0);
+}
+
+// ====== RESULTS ======
+const TYPE_COLORS = { E: '#0369a1', I: '#be185d', S: '#b45309', N: '#6d28d9', T: '#1d4ed8', F: '#c62828', J: '#00695c', P: '#7b1fa2', A: '#15803d', 'T-identity': '#b91c1c' };
+const STRENGTH_LABELS = { high: '一致性高', medium: '部分一致', low: '存在差异' };
+const STRENGTH_CLS = { high: 'agreement-high', medium: 'agreement-medium', low: 'agreement-low' };
+
+function renderResults(hasAI, isRestored) {
+  const t = STATE.traditionalResult;
+  const ai = STATE.aiResult;
+  const fullType = t.type + '-' + t.identity;
+  const allLetters = (t.type + t.identity).split('');
+  const profile = STATE.questions.type_profiles ? STATE.questions.type_profiles[t.type] : null;
+  const [familyName, familyClass] = getTypeFamily(t.type);
+  const familyGradient = FAMILY_GRADIENTS[familyName] || FAMILY_GRADIENTS['分析家'];
+
+  let html = '';
+
+  if (isRestored) {
+    html += '<div class="bg-amber-50 rounded-2xl px-5 py-3 border border-amber-200 flex items-center gap-3 lg:col-span-2"><span class="w-7 h-7 bg-amber-200 rounded-full flex items-center justify-center text-amber-700 font-bold text-sm shrink-0">&#8635;</span><p class="text-sm text-amber-700">这是上次保存的结果，点击下方「重新测试」可开始新的测试。</p></div>';
+  }
+
+  // ── 1. Type Brand Card ──
+  html += `<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden lg:col-span-2">
+    <div class="bg-gradient-to-br ${familyGradient} px-6 py-8 text-center text-white">
+      <div class="flex justify-center gap-2 mb-3">
+        ${allLetters.map(ch => `<span class="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-white/20 backdrop-blur-sm text-white text-2xl sm:text-3xl font-extrabold">${ch}</span>`).join('')}
+      </div>
+      <span class="inline-flex px-3 py-1 rounded-full bg-white/15 border border-white/20 text-xs font-bold mb-3">${familyName}</span>
+      <p class="text-3xl sm:text-4xl font-extrabold tracking-widest mb-1">${fullType}</p>
+      ${profile ? `<p class="text-lg text-white/80 font-medium">${profile.nickname}</p>` : ''}
+      ${profile ? `<p class="text-sm text-white/60 mt-2 max-w-sm mx-auto">${profile.description}</p>` : ''}
+      ${hasAI && ai.agreement ? `
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 mt-4 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm text-sm font-medium">
+          <span>传统 → AI: ${STRENGTH_LABELS[ai.agreement] || '部分一致'}</span>
+          ${ai.ai_confidence ? `<span class="opacity-70">| AI 信心 ${ai.ai_confidence}%</span>` : ''}
+        </div>
+      ` : ''}
+    </div>
+  </div>`;
+
+  // ── 2. Dimension Bars ──
+  html += `<div class="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm space-y-5">
+    <h3 class="font-bold text-sm text-gray-400 uppercase tracking-wider">维度倾向</h3>`;
+  for (const dim of DIMS) {
+    const d = t.details[dim];
+    if (!d) continue;
+    const meta = STATE.questions.dimension_labels[dim];
+    const domPct = d.dom_pct;
+    const domColor = TYPE_COLORS[d.dominant] || '#4f46e5';
+    const strengthLabel = d.strength === 'clear' ? '明显倾向' : d.strength === 'neutral' ? '居中' : '轻微倾向';
+    const aiDim = hasAI && ai.dimension_analysis ? ai.dimension_analysis[dim] : null;
+    html += `
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between text-xs">
+        <span class="font-semibold" style="color:${domColor}">${d.dominant}</span>
+        <span class="text-gray-400 text-[11px]">${meta.name}</span>
+        <span class="font-semibold text-gray-400">${d.other}</span>
+      </div>
+      <div class="dim-bar-bg flex">
+        <div class="dim-bar-fill" style="width:${domPct}%;background:${domColor}"></div>
+      </div>
+      <div class="flex items-center justify-between text-xs">
+        <span style="color:${domColor}" class="font-medium">${domPct}%</span>
+        <span class="text-gray-400">${strengthLabel}</span>
+        <span class="text-gray-300">${100 - domPct}%</span>
+      </div>
+      ${aiDim && aiDim.confidence ? `
+      <div class="flex items-center gap-2 text-[11px] text-gray-400">
+        <span>AI 维度信心</span>
+        <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full bg-purple-400" style="width:${aiDim.confidence}%"></div>
+        </div>
+        <span class="text-purple-500 font-medium">${aiDim.confidence}%</span>
+      </div>` : ''}
+    </div>`;
+  }
+  html += `</div>`;
+
+  if (hasAI) {
+    // ── 3. AI Insights ──
+    if (ai.insight) {
+      html += `<div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-5 sm:p-6 border border-indigo-100 space-y-4">
+        <div class="flex items-center gap-3">
+          <span class="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 text-white text-sm font-bold rounded-xl flex items-center justify-center shadow-md">AI</span>
+          <div>
+            <h3 class="font-bold text-sm">AI 深度解读</h3>
+            <p class="text-[11px] text-gray-400">基于你的开放题回答，逐维分析如下</p>
+          </div>
+        </div>
+        <p class="text-gray-700 leading-relaxed text-sm">${ai.insight}</p>
+      </div>`;
+    }
+    
+
+    if (ai.answer_quality_score) {
+      html += `<div class="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm space-y-3">
+        <div class="flex items-center justify-between"><h3 class="font-bold text-sm">回答信息量</h3><span class="text-sm font-bold text-indigo-600">${ai.answer_quality_score}%</span></div>
+        <div class="h-2 bg-gray-100 rounded-full overflow-hidden"><div class="quality-fill" style="width:${ai.answer_quality_score}%"></div></div>
+        ${ai.insufficient_evidence_dims && ai.insufficient_evidence_dims.length ? `
+        <div class="bg-amber-50 rounded-xl px-4 py-3 border border-amber-100">
+          <p class="text-xs text-amber-700 font-medium">以下维度证据还不够充分：${ai.insufficient_evidence_dims.join('、')}</p>
+          <p class="text-xs text-amber-500 mt-1">在这些方面提供更多具体经历，AI 能给出更精确的判断。</p>
+        </div>` : ''}
+      </div>`;
+    }
+    if (ai.summary) {
+      html += `<div class="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm">
+        <h3 class="font-bold text-sm mb-2">综合总结</h3>
+        <p class="text-gray-600 text-sm leading-relaxed">${ai.summary}</p>
+      </div>`;
+    }
+
+    // ── 4. Dimension Cross-Validation ──
+    if (ai.dimension_analysis) {
+      html += `<div class="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm space-y-4">
+        <h3 class="font-bold text-sm">逐维交叉验证</h3>`;
+      for (const dim of DIMS) {
+        const aiDim = ai.dimension_analysis[dim];
+        if (!aiDim) continue;
+        const meta = STATE.questions.dimension_labels[dim];
+        const trad = t.details[dim];
+        html += `<div class="border border-gray-100 rounded-xl p-3.5 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">${meta.name}</span>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="text-gray-600">传统: <strong>${trad ? trad.dominant : '-'}</strong></span>
+              <span class="text-gray-300">|</span>
+              <span class="text-indigo-600">AI: <strong>${aiDim['倾向'] || '-'}</strong></span>
+              ${aiDim.confidence ? `<span class="text-gray-400">(${aiDim.confidence}%)</span>` : ''}
+            </div>
+          </div>
+          <p class="text-sm text-gray-600 leading-relaxed">${aiDim['分析'] || ''}</p>
+          ${aiDim.evidence ? `<div class="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500 italic leading-relaxed border-l-2 border-indigo-200">"${aiDim.evidence}"</div>` : ''}
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // ── 5. Agreement Details ──
+    if (ai.agreement_details) {
+      const ad = ai.agreement_details;
+      html += `<div class="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm space-y-3">
+        <h3 class="font-bold text-sm flex items-center gap-2">
+          <span>传统 vs AI</span>
+          <span class="px-2 py-0.5 text-[11px] rounded-full font-medium ${(STRENGTH_CLS[ai.agreement] || 'agreement-medium')}">${STRENGTH_LABELS[ai.agreement] || '部分一致'}</span>
+        </h3>`;
+      if (ad.matching_dims && ad.matching_dims.length) {
+        html += `<div class="flex items-center gap-2 text-sm"><span class="text-emerald-600 font-medium">一致:</span><span class="text-gray-600">${ad.matching_dims.join('、')}</span></div>`;
+      }
+    // ── 4. Evidence → Dimension mapping ──
+    if (ai.dimension_analysis && DIMS.some(function(d) { return ai.dimension_analysis[d] && ai.dimension_analysis[d].evidence; })) {
+      html += `<div class="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 shadow-sm space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-xs text-indigo-600 font-bold">"</span>
+          <h3 class="font-bold text-sm">AI 从你的回答中观察到</h3>
+        </div>
+        <div class="space-y-3">${DIMS.map(function(dim) {
+          var a = ai.dimension_analysis[dim];
+          if (!a || !a.evidence) return '';
+          var meta = STATE.questions.dimension_labels[dim];
+          var trad = t.details[dim];
+          var domColor = TYPE_COLORS[trad ? trad.dominant : 'E'] || '#4f46e5';
+          var conf = a.confidence ? parseInt(a.confidence) : 0;
+          return `<div class="bg-gray-50 rounded-xl p-4 border-l-4 border-indigo-300 space-y-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-bold px-2 py-0.5 rounded" style="background:${domColor}18;color:${domColor}">${dim}</span>
+              <span class="text-xs text-gray-400">${meta.name}</span>
+              <span class="text-gray-300 text-xs">→</span>
+              <span class="text-xs font-semibold text-indigo-600">${a['倾向'] || '-'}</span>
+              ${conf > 0 ? `<span class="text-[10px] text-gray-400">(${'●'.repeat(Math.ceil(conf/25))}${'○'.repeat(4-Math.ceil(conf/25))}) ${conf}%</span>` : ''}
+            </div>
+            <p class="text-xs text-gray-500 italic leading-relaxed">"${a.evidence}"</p>
+            <p class="text-xs text-gray-600 leading-relaxed">${a['分析'] || ''}</p>
+          </div>`;
+        }).join('')}</div>
+      </div>`;
+    }
+
+      if (ad.differing_dims && ad.differing_dims.length) {
+        html += `<div class="flex items-center gap-2 text-sm"><span class="text-amber-600 font-medium">差异:</span><span class="text-gray-600">${ad.differing_dims.join('、')}</span></div>`;
+      }
+      if (ad.explanation) {
+        html += `<p class="text-sm text-gray-500 leading-relaxed">${ad.explanation}</p>`;
+      }
+      html += `</div>`;
+    }
+
+    // ── 6. Differences ──
+    if (ai.differences && ai.differences.length) {
+      html += `<div class="bg-amber-50 rounded-2xl p-5 sm:p-6 border border-amber-200 space-y-2">
+        <h3 class="font-bold text-sm text-amber-800 flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+          值得关注的差异
+        </h3>
+        <ul class="space-y-1.5">${ai.differences.map(d => `<li class="text-sm text-amber-700 flex items-start gap-2"><span class="text-amber-400 mt-0.5 shrink-0">-</span>${d}</li>`).join('')}</ul>
+      </div>`;
+    }
+
+    // ── 7. Strengths & Growth (new design system) ──
+    const hasStrengths = ai.strengths && ai.strengths.length;
+    const hasGrowth = ai.growth_areas && ai.growth_areas.length;
+    const hasCareers = ai.career_hints && ai.career_hints.length;
+    const nickname = profile ? profile.nickname : t.type;
+    if (hasStrengths || hasGrowth) {
+      html += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">`;
+      if (hasStrengths) {
+        html += `<div class="bg-emerald-50/80 rounded-2xl p-5 border border-emerald-100/50 space-y-2">
+          <h3 class="font-bold text-sm text-emerald-700 flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            你的优势
+          </h3>
+          <ul class="space-y-1.5">${ai.strengths.map(s => `<li class="text-sm text-gray-600 flex items-start gap-2"><span class="text-emerald-400 mt-0.5 shrink-0">+</span>${s}</li>`).join('')}</ul>
+        </div>`;
+      }
+      if (hasGrowth) {
+        html += `<div class="bg-amber-50/80 rounded-2xl p-5 border border-amber-100/50 space-y-2">
+          <h3 class="font-bold text-sm text-amber-700 flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            成长建议
+          </h3>
+          <ul class="space-y-1.5">${ai.growth_areas.map(s => `<li class="text-sm text-gray-600 flex items-start gap-2"><span class="text-amber-400 mt-0.5 shrink-0">*</span>${s}</li>`).join('')}</ul>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // ── 8. Comfort & Encouragement ──
+    const comfortTips = ai.follow_up_questions && ai.follow_up_questions.length ? ai.follow_up_questions : [];
+    html += `<div class="bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 rounded-2xl p-5 sm:p-6 border border-pink-100/50 space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="w-7 h-7 bg-gradient-to-br from-pink-400 to-purple-500 text-white text-xs font-bold rounded-lg flex items-center justify-center shadow-sm">&#9829;</span>
+        <h3 class="font-bold text-sm text-purple-800">给 ${nickname} 的悄悄话</h3>
+      </div>
+      <p class="text-sm text-gray-600 leading-relaxed">
+        无论测试结果如何，你都拥有独特而珍贵的内在特质。MBTI 只是一个帮助我们了解自己倾向的工具，它描述的是偏好而非能力，是倾向而非定论。
+      </p>
+      ${hasGrowth ? `
+      <div class="bg-white/70 rounded-xl px-4 py-3 border border-amber-100/50">
+        <p class="text-xs font-bold text-amber-700 mb-1.5">如果想试着在这些方面留意一下</p>
+        <ul class="space-y-1">${ai.growth_areas.slice(0, 3).map(s => `<li class="text-xs text-gray-600 flex items-start gap-2"><span class="text-amber-400 shrink-0 mt-0.5">·</span>${s}</li>`).join('')}</ul>
+      </div>` : ''}
+      ${comfortTips.length > 0 ? `
+      <div class="bg-white/70 rounded-xl px-4 py-3 border border-purple-100/50">
+        <p class="text-xs font-bold text-purple-700 mb-1.5">如果想进一步探索自己</p>
+        <ul class="space-y-1">${comfortTips.slice(0, 3).map(x => `<li class="text-xs text-gray-600 flex items-start gap-2"><span class="text-purple-400 shrink-0 mt-0.5">?</span>${x}</li>`).join('')}</ul>
+      </div>` : ''}
+      <p class="text-xs text-gray-400 italic leading-relaxed">
+        每个人都是复杂而独特的个体，人格测试只是一个参考视角，帮助你更好地理解自己的倾向和偏好。真正重要的，是你在了解之后如何与自己温柔相处、与他人真诚连接。<span class="text-purple-500 font-medium not-italic">${nickname}</span> 的你，本身就很有价值。
+      </p>
+    </div>`;
+
+    if (hasCareers) {
+      html += `<div class="bg-gradient-to-br from-sky-50 via-indigo-50 to-blue-50 rounded-2xl p-5 sm:p-6 border border-sky-100/70 shadow-sm space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 bg-gradient-to-br from-sky-400 to-blue-500 text-white text-sm font-bold rounded-xl flex items-center justify-center shadow-sm">&#9733;</span>
+          <h3 class="font-bold text-sm text-sky-800">可能适合的方向</h3>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${ai.career_hints.map(function(c) {
+          var icons = ['\u{1F4BC}','\u{1F4C8}','\u{1F393}','\u{1F527}','\u{1F3A8}','\u{1F4DA}','\u{1F4BB}','\u{1F3C3}','\u{1F4B0}','\u{1F48C}','\u{1F3E5}','⚡'];
+          var icon = icons[Math.floor(Math.random() * icons.length)];
+          return '<div class="flex items-center gap-2.5 bg-white/80 backdrop-blur-sm rounded-xl px-4 py-2.5 border border-sky-100/60 hover:border-sky-300 hover:bg-white hover:shadow-md transition-all duration-200 group">' +
+            '<span class="text-base shrink-0">' + icon + '</span>' +
+            '<span class="text-sm text-gray-700 font-medium group-hover:text-sky-700 transition-colors">' + c + '</span>' +
+          '</div>';
+        }).join('')}</div>
+      </div>`;
+    }
+  } else {
+    // ── No AI: Minimal preview ──
+    if (profile) {
+      // ── Quick Dimension Summary ──
+      html += `<div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-5 sm:p-6 border border-indigo-100 space-y-3">
+        <div class="flex items-center gap-2">
+          <span class="w-7 h-7 bg-indigo-600 text-white text-xs font-bold rounded-lg flex items-center justify-center">!</span>
+          <h3 class="font-bold text-sm">维度解读</h3>
+        </div>
+        <p class="text-sm text-gray-600 leading-relaxed">你的传统量表结果为 ${fullType}，属于 ${familyName} 型人格。在五个维度中：</p>
+        <div class="space-y-2">${DIMS.map(dim => {
+          const d = t.details[dim];
+          if (!d) return '';
+          const meta = STATE.questions.dimension_labels[dim];
+          const pct = d.dom_pct;
+          const label = pct > 70 ? '明显偏向' : pct > 55 ? '轻微偏向' : '接近居中';
+          return `<div class="flex items-center justify-between text-sm bg-white/70 rounded-xl px-4 py-2.5 border border-indigo-100/50">
+            <span class="font-semibold text-gray-700">${meta.name}</span>
+            <span class="text-gray-500">${d.dominant} ${pct}% <span class="text-gray-400 text-xs">(${label})</span></span>
+          </div>`;
+        }).join('')}</div>
+      </div>`;
+    }
+
+    // ── CTA to do AI analysis + type recap (2-column layout) ──
+    html += `<div class="bg-white rounded-2xl p-5 sm:p-6 border-2 border-dashed border-indigo-200 space-y-3 text-center">
+      <div class="w-12 h-12 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto">
+        <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"/></svg>
+      </div>
+      <h3 class="font-bold text-sm text-gray-700">想要更有深度的分析？</h3>
+      <p class="text-xs text-gray-500 leading-relaxed">回答 5 道根据你的类型定制的开放题，AI 将逐维交叉验证你的测试结果，给出个性化洞察、成长建议和更多细节。</p>
+      <button onclick="showScreen('open-intro')" class="btn-gradient text-sm mx-auto">→ 回答开放题，获取 AI 深度分析</button>
+    </div>
+    <div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-5 sm:p-6 border border-indigo-100 space-y-3">
+      <div class="flex items-center gap-2">
+        <span class="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-sm">${fullType}</span>
+        <h3 class="font-bold text-sm text-gray-700">类型速览</h3>
+      </div>
+      <div class="space-y-2 text-sm">${DIMS.map(dim => {
+        const d = t.details[dim];
+        if (!d) return '';
+        const meta = STATE.questions.dimension_labels[dim];
+        return '<div class="flex items-center justify-between bg-white/70 rounded-xl px-3 py-2 border border-indigo-100/50"><span class="text-gray-500 text-xs">' + meta.name + '</span><span class="font-semibold text-indigo-700">' + d.dominant + ' ' + d.dom_pct + '%</span></div>';
+      }).join('')}</div>
+      <p class="text-xs text-gray-400 text-center pt-1">开放题分析可以验证或修正这些维度倾向</p>
+    </div>`;
+  }
+
+  // ── Bottom ──
+  const baseType = t.type.toLowerCase();
+  if (hasAI) {
+    html += `<div class="lg:col-span-2 flex flex-wrap gap-3 justify-center pt-2">
+      <a href="https://www.16personalities.com/ch/${baseType}-人格" target="_blank" class="btn-gradient text-sm" rel="noopener"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>16Personalities 完整解读</a>
+      <button onclick="viewSavedResults()" class="btn-outline text-sm"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>继续测试</button>
+      <button onclick="goBackToOpenIntro()" class="btn-outline text-sm"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg>返回初步结果</button>
+    </div>`;
+  } else {
+    html += `<div class="lg:col-span-2 flex flex-wrap gap-3 justify-center pt-2">
+      <a href="https://www.16personalities.com/ch/${baseType}-人格" target="_blank" class="btn-gradient text-sm" rel="noopener"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>16Personalities 完整解读</a>
+      <button onclick="viewSavedResults()" class="btn-outline text-sm"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>继续测试</button>
+    </div>`;
+  }
+
+  document.getElementById('results-content').innerHTML = html;
+  showScreen('results');
+}
+
+// ====== INIT ======
+loadQuestions().then(() => {
+  refreshBanner();
+  if (restoreState()) {
+    if (STATE.currentScreen === 'results') { renderResults(!!STATE.aiResult, true); return; }
+    if (STATE.currentScreen === 'traditional') { showScreen('traditional'); renderQuestionPage(STATE.currentPage); return; }
+    if (STATE.currentScreen === 'open-intro') { renderOpenIntro(); showScreen('open-intro'); return; }
+    if (STATE.currentScreen === 'open-ended') { showOpenEndedScreen(); return; }
+    showScreen('welcome');
+    return;
+  }
+  showScreen('welcome');
+});
+</script>
+</body>
+</html>
