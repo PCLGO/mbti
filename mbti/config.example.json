@@ -4,19 +4,19 @@
     "deepseek": {
       "ai_url": "https://api.deepseek.com/v1/chat/completions",
       "ai_model": "deepseek-chat",
-      "ai_api_key": "sk-你的-deepseek-key",
+      "ai_api_key": "<your-deepseek-api-key>",
       "ai_auth_header": "Authorization"
     },
     "glm51": {
       "ai_url": "https://your-glm-provider/api/v1/chat/completions",
       "ai_model": "glm-5.1",
-      "ai_api_key": "sk-你的-glm-key",
+      "ai_api_key": "<your-glm-api-key>",
       "ai_auth_header": "Authorization"
     },
     "kimi26": {
       "ai_url": "https://your-kimi-provider/api/v1/chat/completions",
       "ai_model": "Kimi-K2.6",
-      "ai_api_key": "sk-你的-kimi-key",
+      "ai_api_key": "<your-kimi-api-key>",
       "ai_auth_header": "Authorization"
     }
   }

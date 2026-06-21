@@ -202,21 +202,21 @@ def select_open_ended(details):
 
 
 # ====== DEEPSEEK ======
-def call_ai(system_prompt, user_prompt, retries=2):
+def call_ai(system_prompt, user_prompt, retries=2, temperature=0.3, max_tokens=4096):
     """Generic AI caller. Configure `ai_url`, `ai_model`, and `ai_api_key` in `config.json` or via env vars.
     Keeps default pointing to DeepSeek for backward compatibility."""
     if not AI_API_KEY:
         raise ValueError("AI API Key 未设置。请在 config.json 中配置 ai_api_key 或设置环境变量 AI_API_KEY。")
 
+    messages = []
+    if system_prompt and system_prompt.strip():
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_prompt})
     payload = json.dumps({
         "model": AI_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.3,
-        "max_tokens": 4096,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
     }).encode("utf-8")
 
     req = Request(AI_URL, data=payload, method="POST")
@@ -236,22 +236,7 @@ def call_ai(system_prompt, user_prompt, retries=2):
                 data = json.loads(body)
             # try common response shapes
             if isinstance(data, dict) and data.get("choices"):
-                content = data["choices"][0]["message"]["content"]
-                # Handle both string and structured content blocks (Claude, Kimi format)
-                if isinstance(content, str):
-                    return content
-                elif isinstance(content, list):
-                    # Extract text from content blocks
-                    text_parts = []
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            text_parts.append(block.get("text", ""))
-                    if text_parts:
-                        return "".join(text_parts)
-                    else:
-                        raise RuntimeError("Content block is not a text block: 无法从返回数据中提取文本内容")
-                else:
-                    raise RuntimeError(f"Unexpected content format: {type(content)}")
+                return data["choices"][0]["message"]["content"]
             # some APIs return {"result": "..."} or similar
             if isinstance(data, dict) and data.get("result"):
                 return data.get("result")
@@ -269,14 +254,41 @@ def call_ai(system_prompt, user_prompt, retries=2):
     raise RuntimeError(f"网络错误: {last_error}")
 
 
-def call_deepseek(system_prompt, user_prompt, retries=2):
+def call_deepseek(system_prompt, user_prompt, retries=2, temperature=0.3, max_tokens=4096):
     # kept for backward compatibility; delegate to generic caller
-    return call_ai(system_prompt, user_prompt, retries=retries)
+    return call_ai(system_prompt, user_prompt, retries=retries, temperature=temperature, max_tokens=max_tokens)
 
+
+import re
+
+# 乱答检测 — 过滤掉无意义的回答以节省 token
+_NONSENSE_RE = re.compile(r'^(.)\1{2,}$|^[a-zA-Z]{1,3}$|^(.){1,2}$|^(嗯|哦|啊|哈|是|对|好|行|不|无|有|没|了|的){1,4}$|^(asdf|qwer|test|测试|111|222|aaa|bbb)$', re.IGNORECASE)
+
+def is_nonsense(text):
+    if not text or len(text.strip()) < 3:
+        return True
+    t = text.strip()
+    if _NONSENSE_RE.search(t):
+        return True
+    # 重复字符占比超过 60%
+    if len(t) > 3 and max(t.count(c) for c in set(t)) / len(t) > 0.6:
+        return True
+    # 纯标点符号
+    if all(not c.isalnum() for c in t):
+        return True
+    return False
 
 def analyze_with_ai(traditional_type, identity, details, open_answers):
+    # 过滤乱答
+    filtered = [oa for oa in open_answers if not is_nonsense(oa.get("answer", ""))]
+    meaningful = len(filtered)
+    total = len(open_answers)
+    if meaningful == 0:
+        return _fallback_analysis(traditional_type, identity, details, open_answers)
+    if meaningful < total:
+        print(f"[nonsense] 过滤了 {total - meaningful}/{total} 条乱答", file=sys.stderr)
     try:
-        return _analyze_with_deepseek(traditional_type, identity, details, open_answers)
+        return _analyze_with_deepseek(traditional_type, identity, details, filtered)
     except (RuntimeError, ValueError) as e:
         import traceback, sys
         traceback.print_exc()
@@ -291,7 +303,7 @@ def analyze_with_ai(traditional_type, identity, details, open_answers):
 
 def _fallback_analysis(traditional_type, identity, details, open_answers):
     """Generate a fallback analysis from profile data when DeepSeek is unreachable."""
-    full_type = f"{traditional_type}{identity}"
+    full_type = f"{traditional_type}-{identity}"
     profile = questions_data.get("type_profiles", {}).get(traditional_type, {})
     dim_names = {"EI": "精力来源", "SN": "认知方式", "TF": "决策方式", "JP": "生活态度", "AT": "身份认同"}
 
@@ -310,7 +322,10 @@ def _fallback_analysis(traditional_type, identity, details, open_answers):
         }
 
     return {
+        "insight_title": "AI 深度解读",
         "insight": f"基于传统量表数据，你的类型为 {full_type}。由于 AI 深度分析服务暂不可用，以下分析基于统计数据和类型特征生成，仅供参考。完成开放题后再次提交可获得更精准的个性化解读。",
+        "secret_letter_title": f"给{full_type}的你 的悄悄话",
+        "secret_letter": "MBTI 只是一个帮助我们了解自己倾向的工具，它描述的是偏好而非能力，是倾向而非定论。",
         "agreement": "medium",
         "ai_confidence": 60,
         "answer_quality_score": 50,
@@ -325,12 +340,11 @@ def _fallback_analysis(traditional_type, identity, details, open_answers):
             "你在团队中通常扮演什么角色？",
             "什么情况下你会觉得最有成就感？"
         ],
-        "summary": f"你的传统测试结果为 {full_type}。各维度数据显示了你的基本倾向分布。由于当前 AI 分析服务暂不可用，详细的交叉验证和个性化洞察将在服务恢复后提供。"
     }
 
 
 def _analyze_with_deepseek(traditional_type, identity, details, open_answers):
-    """open_answers is a list of {display_id, text, answer}"""
+    """Split into two calls: first generates long insight text, second generates structured JSON."""
     dim_names = {"EI": "精力来源", "SN": "认知方式", "TF": "决策方式", "JP": "生活态度", "AT": "身份认同"}
     dim_desc = []
     for dim in DIM_ORDER:
@@ -340,92 +354,127 @@ def _analyze_with_deepseek(traditional_type, identity, details, open_answers):
         strength = d.get("strength", "")
         dim_desc.append(f"- {dim_names.get(dim, dim)} ({dim}): {dom} {pct}% ({strength})")
 
-    full_type = f"{traditional_type}{identity}"
+    full_type = f"{traditional_type}-{identity}"
     answers_text = "\n".join(
         f"Q{oa.get('display_id', i+1)}: {oa.get('text', '')}\n回答: {oa.get('answer', '')}"
         for i, oa in enumerate(open_answers)
         if oa.get("answer", "").strip()
     )
 
-    system_prompt = """你是MBTI人格分析专家，擅长从语言表达的细节和模式中深度分析人格特质。
+    # ====== CALL 1: Generate analysis summary & structured data ======
+    call1_prompt = f"""你是MBTI人格分析专家。分析一位{full_type}型人格的开放题回答，输出JSON。
 
-你会收到用户的传统MBTI测试结果和开放式问题的回答。
-
-核心原则：
-1. **分析深度与回答质量对等**：用户回答越详细（具体场景、情绪描述、决策过程、事例细节），你的分析必须越深入。引用用户回答中的具体关键词、短语、对比和矛盾点作为证据。如果用户只写一句话，则相应简短；如果用户写了长篇具体经历，则从多个角度切入做透彻分析。
-
-2. **严格独立验证**：基于开放题文本逐维分析 EI/SN/TF/JP/AT。不要盲目认同传统结果——如果回答展现出不同的倾向，如实指出并说明理由。引用原文作为倾向证据。
-
-3. **情感关照**：注意用户语言中的情绪色彩（焦虑、自信、矛盾、兴奋等），在 insight 和 summary 中体现情感共情。对自我暴露较多的回答，分析应更温和且有深度。
-
-4. **多角度切入**：从以下角度分析回答——(a) 具体行为选择 vs 抽象理念，(b) 情绪表达方式和强度，(c) 决策依据（原则/情感/实用），(d) 对冲突和压力的反应模式，(e) 自我觉察程度。结合这些角度形成综合判断。
-
-5. **诚实面对不确定性**：证据不足时降低 confidence，列出 insufficient_evidence_dims。不从一句话过度推断。
-
-始终以纯JSON格式回复，不要包含markdown代码块或其他文字。"""
-
-    user_prompt = f"""## 传统MBTI测试结果
-初步类型: {full_type}
-
-各维度详情:
+传统量表结果：{full_type}
+维度得分：
 {chr(10).join(dim_desc)}
 
-## 用户开放式回答
-{answers_text if answers_text else "（用户未填写开放题）"}
+回答内容：
+{answers_text if answers_text else "（未填写）"}
 
-## 要求
-请严格分析上述信息，返回纯JSON（不要markdown代码块标记）。如果用户未填写回答，请降低confidence。
+要求：
+- 通篇用「你」称呼对方，不要用「用户」
+- 引用原话时直接加引号（如"我当时的感受是…"），不要标注Q1/Q2等编号
+- 核心任务是验证为什么对方确实是{full_type}型——回答中哪些思维模式、情绪反应、行为倾向印证了各维度
+- 从认知功能角度分析（用F/T/N/S等方向字母，不要Fe/Ni这类缩写，方便普通用户理解）
+- 使用心理学、认知科学术语但自然融入，不堆砌
+- 使用中文标点符号
 
-**重要——分析深度必须与用户回答质量成正比**：用户回答越详细、越具体（包含真实经历、场景描述、情绪感受、决策过程），你的 insight、summary、dimension_analysis 中的"分析"字段必须越充分，直接引用用户原话作为证据。简短回答则相应简短，不强行拉长。
-
+请输出JSON，不要markdown代码块：
 {{
-  "ai_type": "基于开放题分析得出的5字母MBTI类型（含A/T，如ENFJ-A）",
-  "ai_confidence": "0-100的整数，反映你对回答证据充分性的信心",
-  "answer_quality_score": "0-100的整数，反映回答细节、具体例子和自我反思的充分程度",
-  "insufficient_evidence_dims": ["证据不足的维度，如EI或JP"],
-  "follow_up_questions": ["如果需要提高准确性，建议继续追问的问题，最多3个"],
-  "agreement": "high/medium/low 表示传统结果与AI分析的整体一致程度",
-  "agreement_details": {{
-    "matching_dims": ["一致维度列表，如EI", "SN"],
-    "differing_dims": ["差异维度列表，如TF"],
-    "explanation": "对一致与差异的简要解释"
-  }},
+  "analysis_summary": "400~600字深度分析。以「你」称呼，引用原话（不加编号），从认知功能角度（用F/T/N/S等方向字母，不用Fe/Ni缩写）解读行为模式，论证各维度倾向的真实性。要有温度和洞察力。",
   "dimension_analysis": {{
-    "EI": {{"倾向": "E或I", "confidence": 0-100, "evidence": "从用户的回答中引用具体内容作为证据", "分析": "一两句话的综合判断"}},
-    "SN": {{"倾向": "S或N", "confidence": 0-100, "evidence": "引用回答中的具体内容", "分析": "一两句话的综合判断"}},
-    "TF": {{"倾向": "T或F", "confidence": 0-100, "evidence": "引用回答中的具体内容", "分析": "一两句话的综合判断"}},
-    "JP": {{"倾向": "J或P", "confidence": 0-100, "evidence": "引用回答中的具体内容", "分析": "一两句话的综合判断"}},
-    "AT": {{"倾向": "A或T", "confidence": 0-100, "evidence": "引用回答中的具体内容", "分析": "一两句话的综合判断"}}
+    "EI": {{"倾向":"E/I","confidence":0-100,"evidence":"引用原话（不加编号）","分析":"100~180字认知功能分析"}},
+    "SN": {{"倾向":"S/N","confidence":0-100,"evidence":"引用原话（不加编号）","分析":"100~180字认知功能分析"}},
+    "TF": {{"倾向":"T/F","confidence":0-100,"evidence":"引用原话（不加编号）","分析":"100~180字认知功能分析"}},
+    "JP": {{"倾向":"J/P","confidence":0-100,"evidence":"引用原话（不加编号）","分析":"100~180字认知功能分析"}},
+    "AT": {{"倾向":"A/T","confidence":0-100,"evidence":"引用原话（不加编号）","分析":"100~180字认知功能分析"}}
   }},
-  "differences": ["传统与AI分析之间的主要差异，具体说明差异在哪里"],
-  "insight": "对你性格的深刻洞察（2-3句话，中文）",
-  "summary": "综合性格总结（3-5句话，中文）",
-  "strengths": ["优势1（附简要解释）", "优势2", "优势3"],
-  "growth_areas": ["成长建议1（附原因）", "成长建议2"],
-  "career_hints": ["可能适合的方向1", "方向2"]
+  "agreement": "high/medium/low",
+  "agreement_details": {{"matching_dims":[],"differing_dims":[],"explanation":"解释一致与差异"}},
+  "differences": [],
+  "strengths": [],
+  "growth_areas": [],
+  "career_hints": []
 }}"""
 
-    raw = call_deepseek(system_prompt, user_prompt)
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[-1]
-        raw = raw.rsplit("```", 1)[0]
+    print(f"[AI] Call 1: generating analysis data...", file=sys.stderr)
+    raw1 = call_deepseek("", call1_prompt, temperature=0.5, max_tokens=4096)
+    raw1 = raw1.strip()
+    if raw1.startswith("```"):
+        raw1 = raw1.split("\n", 1)[-1]
+        raw1 = raw1.rsplit("```", 1)[0]
 
+    # Parse JSON
+    import re as _re
+    parsed = {}
     try:
-        return json.loads(raw.strip())
-    except json.JSONDecodeError as e:
-        debug_log = f"[AI Parse Error] {e}\n---RAW START---\n{raw}\n---RAW END---"
-        print(debug_log, file=sys.stderr)
-        import re
-        brace_start = raw.find("{")
-        brace_end = raw.rfind("}")
+        parsed = json.loads(raw1)
+    except json.JSONDecodeError:
+        brace_start = raw1.find("{")
+        brace_end = raw1.rfind("}")
         if brace_start != -1 and brace_end > brace_start:
-            candidate = raw[brace_start:brace_end + 1]
             try:
-                return json.loads(candidate)
-            except json.JSONDecodeError:
+                parsed = json.loads(raw1[brace_start:brace_end + 1])
+            except:
                 pass
-        raise RuntimeError(f"AI 返回格式异常，请重试。{e}")
+
+    analysis_summary = parsed.get("analysis_summary", "")
+    dim_analysis = parsed.get("dimension_analysis", {})
+    # Ensure all 5 dimensions exist
+    for dim in DIM_ORDER:
+        if dim not in dim_analysis or not isinstance(dim_analysis[dim], dict):
+            dim_analysis[dim] = {"倾向": "", "confidence": 60, "evidence": "", "分析": ""}
+
+    # ====== CALL 2: Generate personalized letter ======
+    letter_context = f"用户的类型是{full_type}。分析摘要：{analysis_summary[:500]}" if analysis_summary else ""
+    call2_prompt = f"""你是一位温暖有洞察力的MBTI分析师。请给一位{full_type}型人格的人写一封私人信。
+
+{letter_context}
+
+对方自己的话：
+{answers_text if answers_text else "（未填写）"}
+
+要求：写一封真诚、温暖的私人信，600~900字。引用对方原话1-2处（直接用引号，不要标编号）。
+- 用「你」称呼对方
+- 不要标题
+- 不要称呼"亲爱的"
+- 不要任何标记符号
+- 直接以内容开头
+- 语气像一位懂对方的朋友"""
+
+    print(f"[AI] Call 2: generating letter...", file=sys.stderr)
+    letter = call_deepseek("", call2_prompt, temperature=0.8, max_tokens=4096)
+    letter = letter.strip()
+    if letter.startswith("```"):
+        letter = letter.split("\n", 1)[-1]
+        letter = letter.rsplit("```", 1)[0]
+    # Truncate if too long
+    if len(letter) > 2000:
+        letter = letter[:2000]
+
+    # Build result
+    full_type_full = f"{traditional_type}-{identity}"
+    result = {
+        "insight": analysis_summary,
+        "secret_letter_title": f"给{full_type_full}的你 的悄悄话",
+        "secret_letter": letter,
+        "insight_title": "AI 深度解读",
+        "ai_type": parsed.get("ai_type", full_type_full),
+        "ai_confidence": parsed.get("ai_confidence", 72),
+        "answer_quality_score": parsed.get("answer_quality_score", 60),
+        "dimension_analysis": dim_analysis,
+        "insufficient_evidence_dims": parsed.get("insufficient_evidence_dims", []),
+        "follow_up_questions": parsed.get("follow_up_questions", []),
+        "agreement": parsed.get("agreement", "high"),
+        "agreement_details": parsed.get("agreement_details", {"matching_dims":[],"differing_dims":[],"explanation":""}),
+        "differences": parsed.get("differences", []),
+        "strengths": parsed.get("strengths", []),
+        "growth_areas": parsed.get("growth_areas", []),
+        "career_hints": parsed.get("career_hints", []),
+    }
+
+    print(f"[AI] Final: insight_len={len(analysis_summary)} dims_ok={all(d in dim_analysis for d in DIM_ORDER)} letter_len={len(letter)}", file=sys.stderr)
+    return result
 
 
 # ====== HTTP HANDLER ======
@@ -536,18 +585,18 @@ def main():
         print('        "deepseek": {')
         print('          "ai_url": "https://api.deepseek.com/v1/chat/completions",')
         print('          "ai_model": "deepseek-chat",')
-        print('          "ai_api_key": "sk-你的-deepseek-key",')
+        print('          "ai_api_key": "<your-deepseek-api-key>",')
         print('          "ai_auth_header": "Authorization"')
         print('        },')
         print('        "glm51": {')
         print('          "ai_url": "https://your-glm-provider/api/v1/chat/completions",')
         print('          "ai_model": "glm-5.1",')
-        print('          "ai_api_key": "sk-你的-glm-key",')
+        print('          "ai_api_key": "<your-glm-api-key>",')
         print('          "ai_auth_header": "Authorization"')
         print('        }')
         print('      }')
         print('    }')
-        print("    或设置环境变量: set AI_API_KEY=sk-xxx")
+        print("    或设置环境变量: set AI_API_KEY=<your-api-key>")
         print("    传统测试仍可正常使用\n")
 
     server = HTTPServer((args.host, args.port), Handler)

@@ -6,11 +6,12 @@ Uses qwen3.5-omni-plus via DashScope API.
 import json
 import sys
 import base64
+import os
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
-API_KEY = "sk-your-dashscope-api-key"
+API_KEY = os.environ.get("QWEN_API_KEY") or os.environ.get("DASHSCOPE_API_KEY") or ""
 MODEL = "qwen3.5-omni-plus-2026-03-15"
 API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 
@@ -32,6 +33,9 @@ def handle_analyze(args):
 
     if not Path(path).exists():
         return {"content": [{"type": "text", "text": f"文件不存在: {path}"}], "isError": True}
+
+    if not API_KEY:
+        return {"content": [{"type": "text", "text": "Qwen Vision API key is not configured. Set QWEN_API_KEY or DASHSCOPE_API_KEY."}], "isError": True}
 
     ext = Path(path).suffix.lower()
     mime = MIME_MAP.get(ext, "image/png")
