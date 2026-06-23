@@ -5,7 +5,7 @@ Handles /api/questions, /api/score, /api/analyze
 import json, os, random, re, sys, time, traceback
 from pathlib import Path
 from http.client import HTTPSConnection
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
@@ -289,48 +289,11 @@ def analyze_with_ai(traditional_type, identity, details, open_answers):
 
 @app.route("/")
 def handle_root():
-    """Serve the frontend index.html for the root path."""
-    # Try multiple possible paths (Vercel serverless env varies)
-    candidates = [
-        HERE / "public" / "index.html",
-        Path(__file__).parent / "public" / "index.html",
-        Path.cwd() / "public" / "index.html",
-        HERE / "index.html",
-    ]
-    for p in candidates:
-        try:
-            if p.exists() and p.is_file():
-                return app.response_class(
-                    response=p.read_text(encoding="utf-8"),
-                    status=200, mimetype="text/html",
-                )
-        except OSError:
-            pass
-    debug = (
-        f"<h1>Frontend not found</h1>"
-        f"<p><b>__file__:</b> {__file__}</p>"
-        f"<p><b>CWD:</b> {Path.cwd()}</p>"
-        f"<p><b>HERE:</b> {HERE}</p>"
-        f"<p><b>Searched:</b></p><ul>"
+    """Serve the frontend index.html via Flask templates."""
+    return app.response_class(
+        response=render_template("index.html"),
+        status=200, mimetype="text/html",
     )
-    for p in candidates:
-        debug += f"<li>{p} — {'✓ EXISTS' if p.exists() else '✗ NOT FOUND'}</li>"
-    debug += "</ul>"
-    try:
-        debug += "<p><b>CWD contents:</b></p><ul>"
-        for f in sorted(Path.cwd().iterdir()):
-            debug += f"<li>{f.name}{'/' if f.is_dir() else ''}</li>"
-        debug += "</ul>"
-    except OSError:
-        pass
-    debug += f"<p><b>HERE contents:</b></p><ul>"
-    try:
-        for f in sorted(HERE.iterdir()):
-            debug += f"<li>{f.name}{'/' if f.is_dir() else ''}</li>"
-        debug += "</ul>"
-    except OSError:
-        debug += f"<li>Cannot list {HERE}</li></ul>"
-    return debug, 404
 
 
 @app.route("/api/questions")
