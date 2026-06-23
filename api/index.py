@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""Project Mirror — Vercel Serverless (Flask)
-Handles /api/questions, /api/score, /api/analyze
-"""
+"""Project Mirror — Vercel Serverless (Flask)"""
 import json, os, random, re, sys, time, traceback
 from pathlib import Path
-from http.client import HTTPSConnection
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
 # ── Load data ──
 HERE = Path(__file__).parent.parent
-with open(HERE / "questions.json", encoding="utf-8") as f:
-    questions_data = json.load(f)
+DATA_PATH = HERE / "questions.json"
+TEMPLATES = Path(__file__).parent / "templates"
 
 # ── Config from env ──
 AI_API_KEY = os.environ.get("AI_API_KEY", os.environ.get("DEEPSEEK_API_KEY", "")).strip()
@@ -20,7 +17,6 @@ AI_URL = os.environ.get("AI_URL", "https://api.deepseek.com/v1/chat/completions"
 AI_MODEL = os.environ.get("AI_MODEL", "deepseek-chat")
 AI_AUTH_HEADER = os.environ.get("AI_AUTH_HEADER", "Authorization")
 
-# ── Constants ──
 DIM_ORDER = ["EI", "SN", "TF", "JP", "AT"]
 FIRST_POLES = {"EI": "E", "SN": "S", "TF": "T", "JP": "J", "AT": "A"}
 
@@ -29,15 +25,19 @@ _NONSENSE_RE = re.compile(
     r'^(嗯|哦|啊|哈|是|对|好|行|不|无|有|没|了|的){1,4}$|'
     r'^(asdf|qwer|test|测试|111|222|aaa|bbb)$', re.IGNORECASE)
 
+questions_data = {}
+try:
+    if DATA_PATH.exists():
+        with open(DATA_PATH, encoding="utf-8") as f:
+            questions_data = json.load(f)
+except Exception as e:
+    print(f"WARN: failed to load questions.json: {e}")
 
-# ═══════════════════════════════════════════
-#  Scoring
-# ═══════════════════════════════════════════
 
 def score_traditional(answers):
     net_scores = {}
     for dim in DIM_ORDER:
-        dim_qs = [q for q in questions_data["traditional"] if q["dimension"] == dim]
+        dim_qs = [q for q in questions_data.get("traditional", []) if q["dimension"] == dim]
         net = 0
         first = FIRST_POLES[dim]
         second = {"EI":"I","SN":"N","TF":"F","JP":"P","AT":"T"}[dim]
@@ -62,10 +62,6 @@ def score_traditional(answers):
     identity = net_scores["AT"]["dominant"]
     return {"type": type_str, "identity": identity, "details": net_scores}
 
-
-# ═══════════════════════════════════════════
-#  Open-ended selection
-# ═══════════════════════════════════════════
 
 def select_open_ended(details):
     pool = list(questions_data.get("open_ended_pool", []))
@@ -115,10 +111,6 @@ def select_open_ended(details):
     ]
 
 
-# ═══════════════════════════════════════════
-#  AI call
-# ═══════════════════════════════════════════
-
 def call_ai(system_prompt, user_prompt, retries=2, temperature=0.3, max_tokens=4096):
     if not AI_API_KEY:
         raise ValueError("AI API Key 未设置。请在 Vercel 环境变量中配置 AI_API_KEY。")
@@ -161,10 +153,6 @@ def is_nonsense(text):
     if all(not c.isalnum() for c in t): return True
     return False
 
-
-# ═══════════════════════════════════════════
-#  AI analysis
-# ═══════════════════════════════════════════
 
 def _fallback_analysis(traditional_type, identity, details, open_answers):
     full_type = f"{traditional_type}-{identity}"
@@ -251,7 +239,6 @@ def _analyze_with_deepseek(traditional_type, identity, details, open_answers):
                 parsed = json.loads(raw1[brace_start:brace_end+1])
             except json.JSONDecodeError:
                 parsed = {"raw_output": raw1}
-    # Build response from parsed data
     da = parsed.get("dimension_analysis", {})
     for d in DIM_ORDER:
         if d not in da:
@@ -290,13 +277,10 @@ def analyze_with_ai(traditional_type, identity, details, open_answers):
 @app.route("/")
 def handle_root():
     """Serve the frontend index.html."""
-    index_path = Path(__file__).parent / "templates" / "index.html"
-    if index_path.exists():
-        return app.response_class(
-            response=index_path.read_text(encoding="utf-8"),
-            status=200, mimetype="text/html",
-        )
-    return f"<h1>Frontend not found</h1><p>Tried: {index_path}<br>__file__: {__file__}<br>cwd: {Path.cwd()}</p>", 404
+    index_html = TEMPLATES / "index.html"
+    if index_html.exists():
+        return index_html.read_text(encoding="utf-8"), 200, {"Content-Type": "text/html; charset=utf-8"}
+    return f"FE not found: {index_html}", 404
 
 
 @app.route("/api/questions")
@@ -310,10 +294,7 @@ def handle_score():
     answers = data.get("answers", [])
     result = score_traditional(answers)
     result["selected_questions"] = select_open_ended(result["details"])
-    return app.response_class(
-        response=json.dumps(result, ensure_ascii=False),
-        status=200, mimetype="application/json",
-    )
+    return jsonify(result)
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -325,10 +306,7 @@ def handle_analyze():
         data.get("details", {}),
         data.get("open_answers", []),
     )
-    return app.response_class(
-        response=json.dumps(result, ensure_ascii=False),
-        status=200, mimetype="application/json",
-    )
+    return jsonify(result)
 
 
 # Vercel WSGI entry point
