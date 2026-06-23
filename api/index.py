@@ -289,11 +289,14 @@ def analyze_with_ai(traditional_type, identity, details, open_answers):
 
 @app.route("/")
 def handle_root():
-    """Serve the frontend index.html via Flask templates."""
-    return app.response_class(
-        response=render_template("index.html"),
-        status=200, mimetype="text/html",
-    )
+    """Serve the frontend index.html."""
+    index_path = Path(__file__).parent / "templates" / "index.html"
+    if index_path.exists():
+        return app.response_class(
+            response=index_path.read_text(encoding="utf-8"),
+            status=200, mimetype="text/html",
+        )
+    return f"<h1>Frontend not found</h1><p>Tried: {index_path}<br>__file__: {__file__}<br>cwd: {Path.cwd()}</p>", 404
 
 
 @app.route("/api/questions")
