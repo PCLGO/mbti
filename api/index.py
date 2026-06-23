@@ -287,6 +287,18 @@ def analyze_with_ai(traditional_type, identity, details, open_answers):
 #  Routes
 # ═══════════════════════════════════════════
 
+@app.route("/")
+def handle_root():
+    """Serve the frontend index.html for the root path."""
+    index_path = HERE / "public" / "index.html"
+    if index_path.exists():
+        return app.response_class(
+            response=index_path.read_text(encoding="utf-8"),
+            status=200, mimetype="text/html",
+        )
+    return "Frontend not found", 404
+
+
 @app.route("/api/questions")
 def handle_questions():
     return jsonify(questions_data)
