@@ -412,7 +412,7 @@ body:not(.in-liquid-home):not(.in-liquid-lab) .devbar button{color:rgba(36,35,31
 <div id="modal" class="modal" onclick="closeModal(false)"><div class="panel" onclick="event.stopPropagation()"><h3 id="modal-title" class="text-lg font-black mb-2">提示</h3><p id="modal-text" class="text-sm text-gray-600 leading-relaxed"></p><div id="modal-actions" class="flex justify-end gap-2 mt-6"></div></div></div>
 <div id="type-modal" class="modal" onclick="closeType(event)"><div id="type-panel" class="panel" onclick="event.stopPropagation()"></div></div>
 <script>
-const STORE='personality_lab_v3',OLD_STORES=['mbti_saved_state','personality_lab_state_v2'],PER=5,DIMS=['EI','SN','TF','JP','AT'];const LOCAL_DEV_HOSTS=new Set(['localhost','127.0.0.1','::1']);const DEV=new URLSearchParams(location.search).has('dev')&&(LOCAL_DEV_HOSTS.has(location.hostname)||location.protocol==='file:');
+const STORE='personality_lab_v3',OLD_STORES=['mbti_saved_state','personality_lab_state_v2'],PER=5,DIMS=['EI','SN','TF','JP','AT'];const DEV=new URLSearchParams(location.search).has('dev');
 const FAMS={'分析家':['INTJ','INTP','ENTJ','ENTP'],'外交家':['INFJ','INFP','ENFJ','ENFP'],'守卫者':['ISTJ','ISFJ','ESTJ','ESFJ'],'探险家':['ISTP','ISFP','ESTP','ESFP']};
 const GRAD={'分析家':'#E8E3F4','外交家':'#DDEEE6','守卫者':'#E6ECE8','探险家':'#F3E4CF'};
 const COLORS={E:'#2F8F72',I:'#6F5FA8',S:'#B9853F',N:'#6F5FA8',T:'#2F8F72',F:'#6F5FA8',J:'#2F8F72',P:'#6F5FA8',A:'#2F8F72'};
