@@ -314,19 +314,24 @@ def _fallback_analysis(traditional_type, identity, details, open_answers):
         pct = d.get("dom_pct", 50)
         meta = dim_names.get(dim, dim)
         label = "明显偏向" if pct > 70 else ("轻微偏向" if pct > 55 else "接近居中")
+        verdict = "confirmed" if pct > 65 else ("tension" if pct > 50 else "insufficient")
         dim_analysis[dim] = {
-            "倾向": f"{dom} ({pct}%)",
+            "倾向": dom,
+            "verdict": verdict,
             "confidence": min(pct + 10, 95),
             "evidence": f"传统量表数据显示你在该维度偏向 {dom}（{pct}%），属于「{label}」。",
             "分析": f"基于量表统计，你在 {meta}（{dim}）维度上表现出 {dom} 倾向。" + ("这一倾向较为明显。" if pct > 60 else "但并非极端，在不同情境下可能有所变化。")
         }
 
     return {
+        "portrait": "",
         "insight_title": "AI 深度解读",
         "insight": f"基于传统量表数据，你的类型为 {full_type}。由于 AI 深度分析服务暂不可用，以下分析基于统计数据和类型特征生成，仅供参考。完成开放题后再次提交可获得更精准的个性化解读。",
         "secret_letter_title": f"给{full_type}的你 的悄悄话",
         "secret_letter": "MBTI 只是一个帮助我们了解自己倾向的工具，它描述的是偏好而非能力，是倾向而非定论。",
         "agreement": "medium",
+        "ai_available": False,
+        "is_fallback": True,
         "ai_confidence": 60,
         "answer_quality_score": 50,
         "insufficient_evidence_dims": [],
@@ -394,8 +399,12 @@ def _analyze_with_deepseek(traditional_type, identity, details, open_answers):
   "differences": [],
   "strengths": [],
   "growth_areas": [],
-  "career_hints": []
-}}"""
+  "career_hints": [],
+  "core_tension": "80字以内，为你的焦虑或困境精准命名",
+  "verdicts": {{"EI":"✅","SN":"✅","TF":"⚠️","JP":"✅","AT":"?"}}
+}}
+
+关于verdicts：根据开放题内容对每个维度做独立判断，不要照抄量表倾向。✅=支持量表倾向，⚠️=存在张力，?=信息不足。每个维度都要写，不要全部写✅。"""
 
     print(f"[AI] Call 1: generating analysis data...", file=sys.stderr)
     raw1 = call_deepseek("", call1_prompt, temperature=0.5, max_tokens=4096)
@@ -425,36 +434,116 @@ def _analyze_with_deepseek(traditional_type, identity, details, open_answers):
         if dim not in dim_analysis or not isinstance(dim_analysis[dim], dict):
             dim_analysis[dim] = {"倾向": "", "confidence": 60, "evidence": "", "分析": ""}
 
-    # ====== CALL 2: Generate personalized letter ======
-    letter_context = f"用户的类型是{full_type}。分析摘要：{analysis_summary[:500]}" if analysis_summary else ""
-    call2_prompt = f"""你是一位温暖有洞察力的MBTI分析师。请给一位{full_type}型人格的人写一封私人信。
+    # ====== CALL 2: Portrait + Letter ======
+    letter_context = f"分析摘要：{analysis_summary[:400]}" if analysis_summary else ""
+    call2_prompt = f"""你是一位温暖有洞察力的心理学家兼作家。请为一位{full_type}型的人撰写两份文字。
 
 {letter_context}
 
 对方自己的话：
 {answers_text if answers_text else "（未填写）"}
 
-要求：写一封真诚、温暖的私人信，600~900字。引用对方原话1-2处（直接用引号，不要标编号）。
-- 用「你」称呼对方
-- 不要标题
-- 不要称呼"亲爱的"
-- 不要任何标记符号
-- 直接以内容开头
-- 语气像一位懂对方的朋友"""
+请按以下结构输出，用「你」称呼。不要标题。
 
-    print(f"[AI] Call 2: generating letter...", file=sys.stderr)
-    letter = call_deepseek("", call2_prompt, temperature=0.8, max_tokens=4096)
-    letter = letter.strip()
-    if letter.startswith("```"):
-        letter = letter.split("\n", 1)[-1]
-        letter = letter.rsplit("```", 1)[0]
-    # Truncate if too long
-    if len(letter) > 2000:
-        letter = letter[:2000]
+一、整体气质画像（150~250字）
+画一幅人物速写像：你说话做事像什么？给人什么感觉？像一种什么场景、物件或声音？
+先描绘画像，再点出藏在画像里的矛盾。
+用短句、断句、意象堆叠——像一段诗意的意识流，让人「看见人」。
+用有节奏的标点（句号、逗号、破折号）控制呼吸感，不要全程无标点。
+
+二、悄悄话（300~600字）
+用文学性和心理洞察写出最需要被理解的部分。
+引用对方原话1-2处（直接用引号，不要标编号）。
+语气像一位懂你的朋友——温暖、坦诚、不评判。
+直接以内容开头。"""
+
+    print(f"[AI] Call 2: portrait + letter…", file=sys.stderr)
+    raw2 = call_deepseek("", call2_prompt, temperature=0.7, max_tokens=2048)
+    raw2 = raw2.strip()
+    if raw2.startswith("```"):
+        raw2 = raw2.split("\n", 1)[-1]
+        raw2 = raw2.rsplit("```", 1)[0]
+
+    # Parse portrait and letter from Call 2
+    import re
+    portrait = ""
+    letter = ""
+
+    profile_marker = "整体气质画像"
+    letter_marker = "悄悄话"
+
+    profile_pos = raw2.find(profile_marker)
+    letter_pos = raw2.find(letter_marker)
+
+    if profile_pos >= 0:
+        content_start = profile_pos + len(profile_marker)
+        nl = raw2.find("\n", content_start)
+        if nl != -1:
+            content_start = nl + 1
+        if letter_pos >= 0:
+            portrait = raw2[content_start:letter_pos].strip()
+        else:
+            portrait = raw2[content_start:].strip()
+
+    if letter_pos >= 0:
+        letter_start = letter_pos + len(letter_marker)
+        nl2 = raw2.find("\n", letter_start)
+        if nl2 != -1:
+            letter_start = nl2 + 1
+        letter = raw2[letter_start:].strip()
+
+    # Clean up portrait
+    def _strip_md(s):
+        return re.sub(r'^#{1,6}\s+', '', s, flags=re.MULTILINE).strip()
+
+    portrait = _strip_md(portrait)
+    portrait = re.sub(r'\*{2,}', '', portrait).strip()
+    portrait = re.sub(r'^[一二][、.．]?\s*整体气质画像\s*', '', portrait).strip()
+    portrait = re.sub(r'\n+#{0,4}\s*二[、.．].*$', '', portrait).strip()
+
+    # Clean up letter
+    letter = _strip_md(letter)
+    letter = re.sub(r'\*{2,}', '', letter).strip()
+    letter = re.sub(r'^[一二][、.．]?\s*悄悄话\s*', '', letter).strip()
+
+    if not letter or len(letter) < 30:
+        letter = ""
+    if not portrait or len(portrait) < 30:
+        portrait = analysis_summary[:200] if analysis_summary else ""
+
+    # Extract core_tension and verdicts
+    core_tension = parsed.get("core_tension", "")
+    ai_verdicts = parsed.get("verdicts", {})
+
+    # Build dimension_analysis with verdicts
+    dim_verdicts = {}
+    for dim in DIM_ORDER:
+        v = ai_verdicts.get(dim, "?")
+        if v == "✅":
+            dim_verdicts[dim] = "confirmed"
+        elif "⚠" in v:
+            dim_verdicts[dim] = "tension"
+        else:
+            dim_verdicts[dim] = "insufficient"
+
+    dim_analysis_with_verdicts = {}
+    for dim in DIM_ORDER:
+        ad = dim_analysis.get(dim, {})
+        dom = details.get(dim, {}).get("dominant", "")
+        verdict = dim_verdicts.get(dim, "insufficient")
+        conf = 90 if verdict == "confirmed" else (70 if verdict == "tension" else 55)
+        dim_analysis_with_verdicts[dim] = {
+            "倾向": dom,
+            "verdict": verdict,
+            "confidence": conf,
+            "evidence": ad.get("evidence", ""),
+            "分析": ad.get("分析", ""),
+        }
 
     # Build result
     full_type_full = f"{traditional_type}-{identity}"
     result = {
+        "portrait": portrait,
         "insight": analysis_summary,
         "secret_letter_title": f"给{full_type_full}的你 的悄悄话",
         "secret_letter": letter,
@@ -462,8 +551,8 @@ def _analyze_with_deepseek(traditional_type, identity, details, open_answers):
         "ai_type": parsed.get("ai_type", full_type_full),
         "ai_confidence": parsed.get("ai_confidence", 72),
         "answer_quality_score": parsed.get("answer_quality_score", 60),
-        "dimension_analysis": dim_analysis,
-        "insufficient_evidence_dims": parsed.get("insufficient_evidence_dims", []),
+        "dimension_analysis": dim_analysis_with_verdicts,
+        "insufficient_evidence_dims": [d for d, v in ai_verdicts.items() if v == "?"],
         "follow_up_questions": parsed.get("follow_up_questions", []),
         "agreement": parsed.get("agreement", "high"),
         "agreement_details": parsed.get("agreement_details", {"matching_dims":[],"differing_dims":[],"explanation":""}),
@@ -471,9 +560,12 @@ def _analyze_with_deepseek(traditional_type, identity, details, open_answers):
         "strengths": parsed.get("strengths", []),
         "growth_areas": parsed.get("growth_areas", []),
         "career_hints": parsed.get("career_hints", []),
+        "core_tension": core_tension,
+        "ai_available": True,
+        "is_fallback": False,
     }
 
-    print(f"[AI] Final: insight_len={len(analysis_summary)} dims_ok={all(d in dim_analysis for d in DIM_ORDER)} letter_len={len(letter)}", file=sys.stderr)
+    print(f"[AI] Final: portrait={len(portrait)}c secret={len(letter)}c strengths={len(result['strengths'])} verdicts={dim_verdicts}", file=sys.stderr)
     return result
 
 

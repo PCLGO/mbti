@@ -2,7 +2,7 @@
 
 ## 概述
 
-Project Mirror（MBTI 人格测试）的 Vercel 部署版本。与 `D:\Code\1123\mbti\` 同步，但为 Vercel Serverless 架构做了适配。
+Persona Mirror（人格镜像，原 Project Mirror）的 Vercel 部署版本。与 `D:\Code\1123\mbti\` 同步，但为 Vercel Serverless 架构做了适配。
 
 ## 项目结构（Vercel）
 
